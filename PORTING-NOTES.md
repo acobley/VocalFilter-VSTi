@@ -208,11 +208,21 @@ cd ~/DXi-DEv/VocalFilter-VSTi
 ./setup-xcode.sh
 ```
 
-The first configure clones the VST3 SDK (~250 MB) into `external/`, which
-takes a few minutes. To skip that and reuse the copy SpyBand already has:
+**DECISION: this project keeps its OWN copy of the SDK** in `external/`
+(247 MB, `vst3sdk` + `AudioUnitSDK`), cloned by the first configure, rather
+than pointing at the copy SpyBand already has via `VST3_SDK_ROOT`. The reason
+is shipping: VocalFilter may go out separately from the other plug-ins, and a
+project whose SDK lives inside a sibling's folder is not self-contained — the
+tree is either buildable on its own or it is not. `external/` is
+`.gitignore`d, so this costs disk and a few minutes on the first configure,
+nothing in the repo.
 
-```sh
-VST3_SDK_ROOT=~/DXi-DEv/SpyBand-VSTi/external/vst3sdk ./setup-xcode.sh
+The build was run and both bundles are in place:
+
+```
+build/VST3/Release/VocalFilter.vst3
+build/VST3/Release/VocalFilter.component
+build/VST3/Debug/VocalFilter.vst3
 ```
 
 Sources are globbed with `CONFIGURE_DEPENDS`, so there is no file list to
