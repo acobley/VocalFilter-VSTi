@@ -39,6 +39,13 @@ const ParamDef kParams[kNumParams] =
 
 	{ kMix,                         "Dry / Wet",    "%",  ParamType::Float, kMixMin,             kMixMax,             kMixDefault,                    kMixMin,             kMixMax,             0,    true },
 	{ kGlide,                       "Glide",        "ms", ParamType::Float, kGlideMinMs,         kGlideMaxMs,         kGlideDefaultMs,                kGlideMinMs,         kGlideMaxMs,         0,    false },
+
+	// Defaults to MANUAL, not to Aaaa. The nine formant parameters already
+	// default to the Aaa patch, so a fresh instance sounds exactly as it
+	// did before this parameter existed and every slider is live. Landing
+	// on a preset instead would make a new user's first slider drag do
+	// nothing they could see a reason for.
+	{ kVowel,                       "Vowel",        "",   ParamType::Enum,  0.0,                 kVowelCount,         kVowelManual,                   0.0,                 kVowelCount,         kVowelCount, false },
 };
 
 //------------------------------------------------------------------------
@@ -47,7 +54,7 @@ const ParamDef kParams[kNumParams] =
 // wrong place is exactly the kind of mistake that presents as "the width
 // slider moves the level".
 //------------------------------------------------------------------------
-static_assert (kNumParams == 12, "twelve parameters: trim, 3 x 3 formant, mix, glide");
+static_assert (kNumParams == 13, "thirteen parameters: trim, 3 x 3 formant, mix, glide, vowel");
 static_assert (formantParam (0, kFieldFreq)      == kF1Freq,      "F1 freq id");
 static_assert (formantParam (0, kFieldBandwidth) == kF1Bandwidth, "F1 width id");
 static_assert (formantParam (0, kFieldLevel)     == kF1Level,     "F1 level id");

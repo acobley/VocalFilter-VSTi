@@ -170,12 +170,30 @@ void VocalFilterProcessor::pushParameters ()
 	// time and the control looks like it lags by one change.
 	mDsp.setGlideMs (plainValue (mParams.data (), kGlide));
 
+	// THE VOWEL SELECTOR IS A MODE. On a preset the DSP takes that vowel's
+	// nine values and parameters 1..9 are ignored; on Manual it takes them.
+	// Either way these are only TARGETS - setFormant starts a glide, so
+	// switching vowels from the host slides exactly as pressing a button
+	// does, and switching back to Manual slides to wherever the sliders
+	// were left.
+	const int selector = static_cast<int> (
+		kParams[kVowel].toInternal (mParams[kVowel]) + 0.5);
+	const FormantSetting* preset = vowelSelection (selector);
+
 	for (int formant = 0; formant < kFormantCount; ++formant)
 	{
-		mDsp.setFormant (formant,
-		                 plainValue (mParams.data (), formantParam (formant, kFieldFreq)),
-		                 plainValue (mParams.data (), formantParam (formant, kFieldBandwidth)),
-		                 plainValue (mParams.data (), formantParam (formant, kFieldLevel)));
+		if (preset != nullptr)
+		{
+			mDsp.setFormant (formant, preset[formant].freqHz,
+			                 preset[formant].bandwidthHz, preset[formant].levelDb);
+		}
+		else
+		{
+			mDsp.setFormant (formant,
+			                 plainValue (mParams.data (), formantParam (formant, kFieldFreq)),
+			                 plainValue (mParams.data (), formantParam (formant, kFieldBandwidth)),
+			                 plainValue (mParams.data (), formantParam (formant, kFieldLevel)));
+		}
 	}
 
 	mDsp.setMixPercent (plainValue (mParams.data (), kMix));

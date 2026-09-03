@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 using namespace VocalFilter;
@@ -342,6 +343,78 @@ int main ()
 		// And the constant that makes it happen is the one that says so.
 		check (kFormantPolarity[0] > 0.0 && kFormantPolarity[1] < 0.0 &&
 		       kFormantPolarity[2] > 0.0, "polarity is + - +");
+	}
+
+	//--------------------------------------------------------------------
+	section ("2c. The vowel SELECTOR - what the host automates");
+	//--------------------------------------------------------------------
+	{
+		// The selector's mapping lives in this SDK-free layer precisely so
+		// it can be tested here rather than only inside a processor that
+		// needs a host to run.
+		check (vowelSelection (kVowelManual) == nullptr,
+		       "selector 0 is Manual - the nine parameters, not a preset");
+
+		bool mapped = true;
+		for (int v = 1; v <= kVowelCount; ++v)
+		{
+			const FormantSetting* got = vowelSelection (v);
+			if (got != kVowels[v - 1].formants)
+				mapped = false;
+		}
+		check (mapped, "selectors 1..5 map to Aaaa..Uuuu in table order");
+
+		// An out-of-range selector must be MANUAL, not a crash and not a
+		// silently clamped preset. A host is free to send anything, and a
+		// saved project from a future version with more vowels will.
+		check (vowelSelection (-1) == nullptr &&
+		       vowelSelection (kVowelCount + 1) == nullptr &&
+		       vowelSelection (9999) == nullptr,
+		       "an out-of-range selector falls back to Manual");
+
+		// The names the host's parameter list shows must line up with the
+		// presets they select, or the list is lying about what it does.
+		bool named = (std::string (vowelSelectionName (kVowelManual)) == "Manual");
+		for (int v = 1; v <= kVowelCount; ++v)
+			if (std::string (vowelSelectionName (v)) != kVowels[v - 1].name)
+				named = false;
+		check (named, "every selector position is named after the vowel it selects");
+
+		check (kVowelChoices == kVowelCount + 1, "six positions: Manual plus five vowels");
+	}
+
+	{
+		// Switching vowels from the host must GLIDE, exactly as pressing a
+		// button does - the processor feeds the selector's preset through
+		// the same setFormant, so this is really a check that nothing
+		// about the selector path snaps.
+		Dsp dsp;
+		dsp.setSampleRate (kRate);
+		dsp.setGlideMs (150.0);
+		applyPatch (dsp, vowelSelection (5));      // Uuuu
+		dsp.reset ();
+
+		const FormantSetting* target = vowelSelection (2);   // Eeee
+		for (int k = 0; k < kFormantCount; ++k)
+			dsp.setFormant (k, target[k].freqHz, target[k].bandwidthHz, target[k].levelDb);
+
+		const int expected = static_cast<int> (150.0 * 0.001 * kRate + 0.5);
+		float in = 0.0f, oL = 0.0f, oR = 0.0f;
+		int n = 0;
+		while (dsp.gliding () && n < expected * 4) { dsp.process (&in,&in,&oL,&oR,1); ++n; }
+
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "a selector change glides: settled after %d samples (want %d)",
+		               n, expected);
+		check (n == expected, label);
+
+		bool arrived = true;
+		for (int k = 0; k < kFormantCount; ++k)
+			if (dsp.formantFreq (k) != target[k].freqHz ||
+			    dsp.formantBandwidth (k) != target[k].bandwidthHz)
+				arrived = false;
+		check (arrived, "and lands exactly on the selected vowel");
 	}
 
 	//--------------------------------------------------------------------

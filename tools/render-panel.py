@@ -8,7 +8,11 @@ vowel names and parameter ranges out of VocalFilterDsp.h. If a constant
 becomes an expression this cannot evaluate, the script fails loudly rather
 than quietly drawing a layout that is not the one that will ship.
 
-    python3 tools/render-panel.py [out.png]
+    python3 tools/render-panel.py [out.png] [selected-vowel]
+
+`selected-vowel` is 0 for Manual (the default the plug-in loads with, and
+what this draws if the argument is left off) or 1..5 to show one of the
+vowel buttons lit, as it is when the Vowel parameter is on a preset.
 """
 
 import os
@@ -111,15 +115,20 @@ centred('Vocal Tract  -  three parallel formants',
         env['kMargin'], env['kTitleTop'], W - env['kMargin'],
         env['kTitleTop'] + env['kTitleHeight'], LABEL)
 
-# vowel buttons
+# vowel buttons. The selected one is filled and lettered in green - it is a
+# push button and a state indicator, because the Vowel parameter can move
+# under automation with nobody touching the panel.
+SELECTED = int(sys.argv[2]) if len(sys.argv) > 2 else 0
 n = env['kVowelCount']
 bw = (env['kContentWidth'] - (n - 1) * env['kVowelGap']) / n
 for i, (name, sound) in enumerate(VOWELS):
     left = env['kMargin'] + i * (bw + env['kVowelGap'])
+    lit = (i + 1 == SELECTED)
     box(round(left), env['kVowelTop'], round(left + bw),
-        env['kVowelTop'] + env['kVowelHeight'] - 3)
+        env['kVowelTop'] + env['kVowelHeight'] - 3,
+        fill=BAR_FILL if lit else None)
     centred(name, round(left), env['kVowelTop'] + 5, round(left + bw),
-            env['kVowelTop'] + 18, VALUE)
+            env['kVowelTop'] + 18, LABEL if lit else VALUE)
 
 # column headings
 for c, head in enumerate(('F1', 'F2', 'F3')):

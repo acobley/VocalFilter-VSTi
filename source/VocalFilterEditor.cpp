@@ -85,22 +85,80 @@ void VocalFilterEditor::setParameter (ParamID tag, double plain)
 }
 
 //------------------------------------------------------------------------
-void VocalFilterEditor::applyVowel (int index)
+int VocalFilterEditor::currentVowel () const
 {
-	if (index < 0 || index >= kVowelCount)
-		return;
+	if (mController == nullptr)
+		return kVowelManual;
+	return static_cast<int> (
+		kParams[kVowel].toInternal (mController->getParamNormalized (kVowel)) + 0.5);
+}
 
-	const VowelPreset& vowel = kVowels[index];
+//------------------------------------------------------------------------
+void VocalFilterEditor::selectVowel (int selector)
+{
+	setParameter (kVowel, static_cast<double> (selector));
+}
 
+//------------------------------------------------------------------------
+void VocalFilterEditor::captureAndGoManual ()
+{
+	const FormantSetting* preset = vowelSelection (currentVowel ());
+	if (preset == nullptr)
+		return;                        // already Manual
+
+	// The nine FIRST, the mode second. Not for the DSP's sake - each
+	// parameter has its own queue, so within a block the order does not
+	// reach it - but so that a host recording this gesture records the
+	// values arriving before the mode that makes them matter.
 	for (int k = 0; k < kFormantCount; ++k)
 	{
-		setParameter (formantParam (k, kFieldFreq),      vowel.formants[k].freqHz);
-		setParameter (formantParam (k, kFieldBandwidth), vowel.formants[k].bandwidthHz);
-		setParameter (formantParam (k, kFieldLevel),     vowel.formants[k].levelDb);
+		setParameter (formantParam (k, kFieldFreq),      preset[k].freqHz);
+		setParameter (formantParam (k, kFieldBandwidth), preset[k].bandwidthHz);
+		setParameter (formantParam (k, kFieldLevel),     preset[k].levelDb);
 	}
 
-	// Dry / Wet and Output Trim are deliberately NOT touched. They are how
-	// the plug-in is set up in a mix; the vowel is what it is saying.
+	setParameter (kVowel, static_cast<double> (kVowelManual));
+}
+
+//------------------------------------------------------------------------
+void VocalFilterEditor::refreshVowelState ()
+{
+	if (frame == nullptr || mController == nullptr)
+		return;
+
+	const int selector = currentVowel ();
+	const FormantSetting* preset = vowelSelection (selector);
+
+	for (int v = 0; v < kVowelCount; ++v)
+		if (mVowelButtons[v])
+			mVowelButtons[v]->setSelected (v + 1 == selector);
+
+	// The nine sliders show WHAT THE DSP IS USING, which on a preset is
+	// the preset and not the parameters. Display only - setValueNormalized
+	// without performEdit - because the parameters genuinely still hold
+	// the manual values, and pretending otherwise is what captureAndGoManual
+	// is for.
+	for (int k = 0; k < kFormantCount; ++k)
+	{
+		const double plain[3] = {
+			preset ? preset[k].freqHz      : 0.0,
+			preset ? preset[k].bandwidthHz : 0.0,
+			preset ? preset[k].levelDb     : 0.0 };
+		const FormantField fields[3] = { kFieldFreq, kFieldBandwidth, kFieldLevel };
+
+		for (int j = 0; j < 3; ++j)
+		{
+			const ParamID tag = formantParam (k, fields[j]);
+			auto it = mControls.find (tag);
+			if (it == mControls.end () || it->second == nullptr)
+				continue;
+
+			const double shown = preset ? paramDef (tag).toNormalized (plain[j])
+			                            : mController->getParamNormalized (tag);
+			it->second->setValueNormalized (static_cast<float> (shown));
+			it->second->invalid ();
+		}
+	}
 }
 
 //------------------------------------------------------------------------
@@ -168,8 +226,12 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	                   kTitleTop + kTitleHeight));
 
 	//--------------------------------------------------------------------
-	// The five vowel buttons. Each one writes the nine formant parameters
-	// and nothing else - see applyVowel.
+	// The five vowel buttons. Each one writes the VOWEL SELECTOR - one
+	// parameter, not nine - so a button press and a host automating Vowel
+	// travel the identical path through the processor.
+	//
+	// They are also indicators: the selector can move with nobody
+	// touching the panel, so refreshVowelState lights whichever is live.
 	//
 	// The handler captures `this` and an INDEX, not a pointer into
 	// kVowels: the button outlives nothing here, but an index cannot be
@@ -178,7 +240,9 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	for (int v = 0; v < kVowelCount; ++v)
 	{
 		auto* button = new SpyPresetButton (vowelCell (v), kVowels[v].name);
-		button->setHandler ([this, v] { applyVowel (v); });
+		// v + 1, because 0 on the selector is Manual.
+		button->setHandler ([this, v] { selectVowel (v + 1); });
+		mVowelButtons[v] = button;
 		frame->addView (button);
 	}
 
@@ -234,6 +298,8 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 		addSlider (kBottom[column], kBottomLabels[column], r);
 	}
 
+	refreshVowelState ();
+
 	frame->open (parent, platformType);
 	return true;
 }
@@ -242,6 +308,8 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 void PLUGIN_API VocalFilterEditor::close ()
 {
 	mControls.clear ();
+	for (auto*& button : mVowelButtons)
+		button = nullptr;
 
 	if (frame)
 	{
@@ -258,6 +326,15 @@ void VocalFilterEditor::valueChanged (CControl* control)
 
 	const ParamID tag = static_cast<ParamID> (control->getTag ());
 	const ParamValue value = control->getValueNormalized ();
+
+	// TOUCHING A FORMANT SLIDER LEAVES PRESET MODE. The alternative is a
+	// slider that visibly moves and changes nothing, because the processor
+	// is reading the preset and ignoring parameters 1..9 - which is the
+	// worst thing a control can do. Capturing first means the sound does
+	// not jump: the eight values you did not touch are already the ones
+	// you could hear.
+	if (tag < kNumParams && isFormantParam (tag) && currentVowel () != kVowelManual)
+		captureAndGoManual ();
 
 	mController->setParamNormalized (tag, value);
 	mController->performEdit (tag, value);
@@ -281,6 +358,21 @@ void VocalFilterEditor::controlEndEdit (CControl* control)
 void VocalFilterEditor::updateControl (ParamID tag, ParamValue normalized)
 {
 	if (frame == nullptr)
+		return;
+
+	// The selector moving changes what every formant slider should be
+	// showing, so it is not a control update - it is a whole-panel one.
+	if (tag == kVowel)
+	{
+		refreshVowelState ();
+		return;
+	}
+
+	// While a preset is live the nine sliders are showing the PRESET, so a
+	// change to the parameters behind them is not something to display -
+	// it would overwrite the preset's values with the manual ones the
+	// panel is deliberately not showing.
+	if (isFormantParam (tag) && currentVowel () != kVowelManual)
 		return;
 
 	auto it = mControls.find (tag);

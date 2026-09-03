@@ -53,6 +53,23 @@ enum Param : Steinberg::Vst::ParamID
 	kMix,                                   // 10  dry .. wet, %
 	kGlide,                                 // 11  vowel transition time, ms
 
+	//--------------------------------------------------------------------
+	// The vowel selector, appended last. Manual plus the five presets.
+	//
+	// This parameter is a MODE, and the processor acts on it: while it is
+	// on a preset, the DSP takes that preset's nine values and IGNORES
+	// parameters 1..9. That is what makes it work with the editor closed,
+	// offline, and under automation - none of which a controller-side
+	// implementation would survive.
+	//
+	// The price is that a host's own generic parameter list still shows
+	// whatever 1..9 were last set to while a preset is selected. The
+	// plug-in's own panel does not have that problem: it displays the
+	// preset's values, and touching a slider captures them into 1..9 and
+	// switches back to Manual so nothing jumps.
+	//--------------------------------------------------------------------
+	kVowel,                                 // 12  0 = Manual, 1..5 = presets
+
 	kNumParams
 };
 
@@ -132,6 +149,13 @@ inline double plainValue (const double* normalized, Steinberg::Vst::ParamID id)
 /** Look a definition up by id, range-checked. Returns kParams[kOutputTrim]
     for anything unknown - including kBypass, which is not in the table. */
 const ParamDef& paramDef (Steinberg::Vst::ParamID id);
+
+/** True for one of the nine formant parameters - the ones the vowel
+    selector overrides while it is on a preset. */
+inline bool isFormantParam (Steinberg::Vst::ParamID id)
+{
+	return id >= kFormantBase && id < kFormantBase + kFormantCount * 3;
+}
 
 /** True for an id the table actually describes. */
 inline bool isTableParam (Steinberg::Vst::ParamID id) { return id < kNumParams; }

@@ -19,10 +19,10 @@ summed, mixed against the dry signal and trimmed.
 | Buses | **Stereo in, stereo out, and nothing else** | `setBusArrangements` refuses every other layout and `resource/au-info.plist` lists only `2/2` to match — auval is strict about the two agreeing |
 | Sample formats | 32- and 64-bit accepted | the line is float, as these plug-ins were; a 64-bit host is converted through `mScratchIn/Out` rather than refused |
 | Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
-| Parameters | twelve: 3 × (freq, width, level), dry/wet, glide, output trim | section 2 |
+| Parameters | thirteen: 3 × (freq, width, level), dry/wet, glide, output trim, vowel selector | section 2 |
 | Editor | **Yes** | the silent shell was validated first — guide step 6 — and the panel came afterwards |
 | Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand, plus `SpyPresetButton` | section 4 |
-| Vowel presets | five buttons — A E I O U — each writing the nine formant parameters and nothing else | section 2 |
+| Vowel presets | five — A E I O U — reached from the panel or from a host-automatable **Vowel** parameter | sections 2 and 2c |
 | Vowel transitions | a timed **linear ramp**, one length for all nine, so they arrive together | section 2b |
 
 ```
@@ -132,6 +132,7 @@ wrong control, and list order is a far smaller price than that.
  9  F3 Level      dB   -40 .. +12      default -26.8
 10  Dry / Wet      %     0 .. 100      default 100
 11  Glide         ms     0 .. 2000     default 150
+12  Vowel         --     Manual, Aaaa, Eeee, Iiii, Oooo, Uuuu   default Manual
 ```
 
 `kBypass` is 1000, far past the end of the table; everything that indexes
@@ -326,6 +327,64 @@ leaks at every frequency, the leakage was the same in both runs, and it
 buried the thing being measured. A Hann window kills the leakage; a sliding
 frame is what makes a click, whose energy is in one frame, stand out from a
 sweep, whose energy is spread over hundreds.
+
+### 2c. The Vowel selector — a mode, acted on by the PROCESSOR
+
+`Vowel` is a six-position enumerated parameter: Manual, then the five
+presets. It is what a host automates to sequence vowels.
+
+**Manual is the default**, not Aaaa. The nine formant parameters already
+default to the Aaa patch, so a fresh instance sounds exactly as it did before
+this parameter existed and every slider is live. Landing on a preset instead
+would make a new user's first slider drag do nothing they could see a reason
+for.
+
+**The processor reads it, not the controller.** While the selector is on a
+preset the DSP takes that vowel's nine values and *ignores parameters 1..9*;
+on Manual it takes them. Both are only ever handed to `setFormant`, so they
+are targets and the Glide applies: switching vowels from a host slides exactly
+as pressing a button does, and switching back to Manual slides to wherever the
+sliders were left.
+
+Two alternatives were considered and rejected:
+
+* **Controller-side**, writing the nine via `performEdit` — least code, but it
+  only works while the controller is live, so it would do nothing offline, and
+  a host automating `Vowel` while also holding automation on the formant
+  parameters gets two writers fighting.
+* **A recall trigger**, with the processor writing the nine out through
+  `data.outputParameterChanges` so there is a single source of truth. Cleaner
+  conceptually, and it would keep a host's generic parameter list honest — but
+  host support for a processor writing parameters varies, and where it is
+  ignored the vowel simply does not change the sound. A cosmetic wart beats a
+  silent failure.
+
+**The wart that comes with the choice**, stated plainly: while a preset is
+selected, a host's *own* generic parameter list still shows whatever
+parameters 1..9 were last set to. The plug-in's panel does not have that
+problem — see below.
+
+The mapping itself lives in `vowelSelection()` in `VocalFilterDsp.h`, the
+layer with no SDK header in it, so the test suite can reach it without a host.
+An out-of-range selector falls back to **Manual**, not to a clamped preset: a
+host may send anything, and a project saved by a future version with more
+vowels will.
+
+#### What the panel does about it
+
+* The five buttons write **one** parameter, the selector — not nine. A button
+  press and a host automation lane travel the identical path.
+* The buttons are also **indicators**. The selector can move with nobody
+  touching the panel, so the live one is drawn filled and lettered in green;
+  a row that did not show which was live would be lying.
+* The nine sliders **show what the DSP is using**, which on a preset is the
+  preset and not the parameters. Display only — no `performEdit`.
+* **Touching a formant slider leaves preset mode**, and captures first: the
+  live preset's nine values are written into parameters 1..9, then the
+  selector goes to Manual. Without the capture the sound would jump to
+  whatever the sliders held before; without leaving preset mode the slider
+  would visibly move and change nothing, which is the worst thing a control
+  can do.
 
 ### DEVIATION 2 — the levels are DERIVED per vowel, and the first attempt was wrong twice
 
@@ -536,13 +595,13 @@ value that is not there. The click fires on mouse **up**, and only if the
 pointer is still inside: pressing a vowel and sliding off it is how you change
 your mind.
 
-`applyVowel` writes each parameter as a **complete gesture** —
-`beginEdit` / `setParamNormalized` / `performEdit` / `endEdit` — so the host
-records it as something it can automate and undo rather than as nine
-unexplained jumps, and every open editor's slider follows because
-`setParamNormalized` comes back through `updateControl`.
+Every parameter this panel writes goes out as a **complete gesture** —
+`beginEdit` / `setParamNormalized` / `performEdit` / `endEdit` — so a host
+records it as something it can automate and undo, and every open editor's
+slider follows because `setParamNormalized` comes back through
+`updateControl`. That matters most in `captureAndGoManual`, which writes ten.
 
-**Dry/Wet and Output Trim are deliberately not touched.** They are how the
+**Dry/Wet and Output Trim are never touched by a vowel.** They are how the
 plug-in is set up in a mix; the vowel is what it is saying.
 
 ### Verifying the layout without building
@@ -555,7 +614,10 @@ out of `VocalFilterDsp.h`, so the picture cannot drift from the code. If a
 constant becomes an expression the script cannot evaluate, it fails loudly
 rather than drawing a layout that is not the one that will ship.
 
-The panel is **348 × 229**, with Glide in the bottom row between Dry/Wet and Output Trim. Run it after any layout change and look at the
+The panel is **348 × 229**, with Glide in the bottom row between Dry/Wet and
+Output Trim. A second argument picks which vowel button to draw lit —
+`docs/panel.png` is the default state, Manual with none lit, and
+`docs/panel-vowel.png` shows Aaaa selected. Run it after any layout change and look at the
 result; arithmetic that says two controls do not overlap has been wrong before.
 
 ### The trap in `editorDestroyed`
@@ -613,7 +675,7 @@ c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-Forty assertions, all passing. The ones worth knowing about:
+Forty-seven assertions, all passing. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
@@ -630,6 +692,10 @@ Forty assertions, all passing. The ones worth knowing about:
   them, that F1 stays pinned at 0 dB, that nothing sits near the level floor,
   and that the F1–F2 valley matches an inverted F2 rather than an in-phase
   one.
+* **§2c tests the vowel selector** without needing a host: that 0 is Manual,
+  that 1..5 map to the table in order, that an out-of-range value falls back
+  to Manual rather than clamping, that the names match what they select, and
+  that a selector change glides and lands exactly on the vowel.
 * **§8b is the glide requirement itself**: at five glide settings, every
   parameter that has to move arrives on the same sample, and that sample is
   the one the control asked for. It also proves the distances really differ

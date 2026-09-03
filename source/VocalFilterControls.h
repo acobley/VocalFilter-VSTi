@@ -215,6 +215,14 @@ public:
 
 	void setHandler (std::function<void ()> handler);
 
+	/** Lit, because the host - or this panel - has this vowel selected.
+	    A push button that is also a state indicator: the Vowel parameter
+	    can be moved by automation with nobody touching the panel, and a
+	    row of buttons that did not show which one was live would be
+	    lying. */
+	void setSelected (bool selected);
+	bool selected () const { return mSelected; }
+
 	void draw (VSTGUI::CDrawContext* context) override;
 
 	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
@@ -230,6 +238,7 @@ private:
 	std::function<void ()> mHandler;
 	bool mPressed = false;
 	bool mInside = false;
+	bool mSelected = false;
 };
 
 //------------------------------------------------------------------------

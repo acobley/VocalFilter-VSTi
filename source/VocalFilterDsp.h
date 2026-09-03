@@ -257,6 +257,34 @@ constexpr VowelPreset kVowels[kVowelCount] =
 constexpr double kMixDefault = 100.0;   // fully wet: the model, not a colour
 
 //------------------------------------------------------------------------
+/** The vowel SELECTOR: 0 is Manual, 1..kVowelCount are the presets.
+ *
+ *  This is the only place the mapping lives, and it is here - in the layer
+ *  that includes no SDK header - rather than in the processor, so the test
+ *  suite can reach it. A host automating the Vowel parameter and a finger
+ *  on a panel button both end up calling this.
+ *
+ *  Returns nullptr for Manual, meaning "use the nine formant parameters".
+ */
+constexpr int kVowelManual  = 0;
+constexpr int kVowelChoices = kVowelCount + 1;
+
+inline const FormantSetting* vowelSelection (int selector)
+{
+	if (selector <= kVowelManual || selector > kVowelCount)
+		return nullptr;
+	return kVowels[selector - 1].formants;
+}
+
+/** What the host's parameter list calls each position. */
+inline const char* vowelSelectionName (int selector)
+{
+	if (selector <= kVowelManual || selector > kVowelCount)
+		return "Manual";
+	return kVowels[selector - 1].name;
+}
+
+//------------------------------------------------------------------------
 /** A LINEAR ramp of fixed duration - the thing a glide is made of.
  *
  *  Not a one-pole. A one-pole is the right smoother for a control that

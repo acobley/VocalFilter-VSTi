@@ -98,9 +98,24 @@ private:
 	    editor's slider follows. */
 	void setParameter (Steinberg::Vst::ParamID tag, double plainValue);
 
-	/** Recall one vowel: the nine formant parameters, and nothing else.
-	    Dry/Wet and Output Trim are the user's, not the vowel's. */
-	void applyVowel (int index);
+	/** Point the Vowel parameter at one preset. ONE parameter write, not
+	    nine: the processor is what reads the selector and feeds the DSP,
+	    so the panel and a host automation lane do the identical thing. */
+	void selectVowel (int selector);
+
+	/** Leave preset mode without the sound jumping: copy the live preset's
+	    nine values into parameters 1..9 FIRST, then switch the selector to
+	    Manual. Called when a formant slider is touched while a preset is
+	    selected. */
+	void captureAndGoManual ();
+
+	/** The selector's current position, 0 = Manual. */
+	int currentVowel () const;
+
+	/** Light the right button, and put the values the DSP is actually
+	    using on the nine sliders - which on a preset are the preset's, not
+	    the parameters'. Display only; nothing is written. */
+	void refreshVowelState ();
 
 	/** A slider bound to a parameter, labelled, and formatting its own
 	    readout from the SAME table the host reads. */
@@ -112,6 +127,7 @@ private:
 	VocalFilterController* mController = nullptr;
 
 	std::map<Steinberg::Vst::ParamID, VSTGUI::CControl*> mControls;
+	SpyPresetButton* mVowelButtons[kVowelCount] = { nullptr };
 };
 
 //------------------------------------------------------------------------

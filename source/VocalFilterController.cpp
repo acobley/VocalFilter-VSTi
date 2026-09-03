@@ -54,6 +54,26 @@ void VocalFilterController::addParameters ()
 
 		int32 flags = ParameterInfo::kCanAutomate;
 
+		// An enumerated parameter is a StringListParameter, not a
+		// RangeParameter with a step count: the host shows the names, and
+		// getParamStringByValue / getParamValueByString round-trip through
+		// them exactly rather than through a number that has to be
+		// re-derived.
+		if (def.type == ParamType::Enum)
+		{
+			auto* list = new StringListParameter (title, id, units, flags);
+			for (int choice = 0; choice <= static_cast<int> (def.plainMax); ++choice)
+			{
+				String128 name;
+				UString (name, str16BufferSize (String128))
+					.assign (vowelSelectionName (choice));
+				list->appendString (name);
+			}
+			parameters.addParameter (list);
+			list->setNormalized (def.defaultNormalized ());
+			continue;
+		}
+
 		RangeParameter* parameter = new RangeParameter (
 			title, id, units,
 			def.plainMin, def.plainMax, def.plainDefault,

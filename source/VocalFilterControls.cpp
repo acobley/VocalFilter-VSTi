@@ -526,6 +526,14 @@ void SpyPresetButton::setHandler (std::function<void ()> handler)
 	mHandler = std::move (handler);
 }
 
+void SpyPresetButton::setSelected (bool selected)
+{
+	if (selected == mSelected)
+		return;
+	mSelected = selected;
+	invalid ();
+}
+
 //------------------------------------------------------------------------
 void SpyPresetButton::draw (CDrawContext* context)
 {
@@ -537,7 +545,9 @@ void SpyPresetButton::draw (CDrawContext* context)
 	// Pressed swaps the 3d rect's two edges, which is what Windows did to
 	// show a button down, and fills it so the state is obvious on a dark
 	// panel where a one-pixel edge is not.
-	if (mPressed && mInside)
+	const bool down = (mPressed && mInside);
+
+	if (down || mSelected)
 	{
 		draw3dRect (context, box, Colours::kBarHigh, Colours::kBarLight);
 		CRect fill (box);
@@ -553,7 +563,11 @@ void SpyPresetButton::draw (CDrawContext* context)
 		draw3dRect (context, box, Colours::kBarLight, Colours::kBarHigh);
 	}
 
-	drawFitted (context, mName, r, mPressed && mInside ? Colours::kLabel : Colours::kValue);
+	// Green for the live vowel, the panel's colour for a label that is
+	// stating a fact; red otherwise, the colour it uses for a value you
+	// can change.
+	drawFitted (context, mName, r,
+	            (down || mSelected) ? Colours::kLabel : Colours::kValue);
 
 	setDirty (false);
 }
