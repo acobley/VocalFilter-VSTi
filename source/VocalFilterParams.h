@@ -34,8 +34,36 @@ enum Param : Steinberg::Vst::ParamID
 {
 	kOutputTrim,     // dB, top of travel is unity
 
+	//--------------------------------------------------------------------
+	// The formant bank. APPENDED after kOutputTrim, which is why the trim
+	// is still id 0 and heads the host's list: an id that MOVES loads a
+	// saved project's value into the wrong control, and list order is a
+	// far smaller price than that.
+	//
+	// Three per formant, in this order, so
+	//
+	//     id = kFormantBase + formant * 3 + field
+	//
+	// and formantParam() below is the only place that arithmetic lives.
+	//--------------------------------------------------------------------
+	kF1Freq, kF1Bandwidth, kF1Level,        // 1, 2, 3
+	kF2Freq, kF2Bandwidth, kF2Level,        // 4, 5, 6
+	kF3Freq, kF3Bandwidth, kF3Level,        // 7, 8, 9
+
+	kMix,                                   // 10  dry .. wet, %
+
 	kNumParams
 };
+
+constexpr Steinberg::Vst::ParamID kFormantBase = kF1Freq;
+
+/** Which of a formant's three parameters. */
+enum FormantField { kFieldFreq = 0, kFieldBandwidth = 1, kFieldLevel = 2 };
+
+constexpr Steinberg::Vst::ParamID formantParam (int formant, FormantField field)
+{
+	return static_cast<Steinberg::Vst::ParamID> (kFormantBase + formant * 3 + field);
+}
 
 /** The VST3 bypass, which hosts expect. 1000 is the convention, and it is
     far past the end of kParams - so RANGE-CHECK every id before indexing
@@ -91,6 +119,14 @@ struct ParamDef
 
 //------------------------------------------------------------------------
 extern const ParamDef kParams[kNumParams];
+
+/** The plain value of a parameter, given the whole normalised set. Used by
+    the processor to feed the DSP and by anything that needs a number in
+    the units the panel shows. */
+inline double plainValue (const double* normalized, Steinberg::Vst::ParamID id)
+{
+	return kParams[id].toPlain (normalized[id]);
+}
 
 /** Look a definition up by id, range-checked. Returns kParams[kOutputTrim]
     for anything unknown - including kBypass, which is not in the table. */

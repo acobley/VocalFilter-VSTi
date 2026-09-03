@@ -10,19 +10,59 @@ namespace VocalFilter {
 
 namespace {
 
-/** The trim smoother's time constant. 10 ms is short enough that a knob
-    feels immediate and long enough that a jump of 60 dB does not click. */
-constexpr double kTrimSmoothSeconds = 0.010;
+/** The parameter smoothers' time constant. 20 ms is short enough that a
+    slider feels immediate and long enough that sweeping a formant across
+    its whole range does not tear. */
+constexpr double kSmoothSeconds = 0.020;
 
-/** Below this the trim is silence, not a very small number. Denormals in
-    a feedback path cost hundreds of cycles a sample on some hardware; a
-    line with no feedback cannot generate them, but the moment you add one
-    this is where the flush belongs. */
 constexpr float kDenormalFloor = 1.0e-25f;
 
 inline float flush (float x)
 {
 	return (x > -kDenormalFloor && x < kDenormalFloor) ? 0.0f : x;
+}
+
+/** Clamps shared by the running filter and by bandpassMagnitude, so a
+    curve drawn from the one cannot disagree with the other.
+
+    The frequency ceiling keeps the resonator well clear of Nyquist, where
+    the bilinear transform's warping makes a bandpass stop behaving like
+    one. The Q ceiling is the guard against unbounded resonance: nothing
+    stops a host automating the bandwidth to its minimum while the centre
+    frequency is at its maximum, which is a Q of 200 and a filter that
+    rings for a second and a half. */
+constexpr double kMinCentreHz = 20.0;
+constexpr double kNyquistFraction = 0.45;
+constexpr double kMinQ = 0.3;
+constexpr double kMaxQ = 60.0;
+
+struct BandpassCoeffs { double b0, b1, b2, a1, a2; };
+
+BandpassCoeffs bandpassCoeffs (double centreHz, double bandwidthHz, double sampleRate)
+{
+	const double fs = (sampleRate > 0.0) ? sampleRate : 44100.0;
+
+	double f0 = std::min (std::max (centreHz, kMinCentreHz), fs * kNyquistFraction);
+	double bw = std::max (bandwidthHz, 1.0);
+	double q  = std::min (std::max (f0 / bw, kMinQ), kMaxQ);
+
+	const double w0    = 2.0 * M_PI * f0 / fs;
+	const double cosw0 = std::cos (w0);
+	const double alpha = std::sin (w0) / (2.0 * q);
+
+	// RBJ bandpass, CONSTANT 0 dB PEAK GAIN: b0 = alpha, not b0 = q*alpha.
+	// The other spelling makes the peak gain equal to Q, so narrowing a
+	// formant would make it louder and the level slider would be arguing
+	// with the bandwidth slider.
+	const double a0 = 1.0 + alpha;
+
+	BandpassCoeffs c;
+	c.b0 =  alpha / a0;
+	c.b1 =  0.0;
+	c.b2 = -alpha / a0;
+	c.a1 = (-2.0 * cosw0) / a0;
+	c.a2 = ( 1.0 - alpha) / a0;
+	return c;
 }
 
 } // namespace
@@ -35,36 +75,175 @@ double trimDb (double normalized)
 }
 
 //------------------------------------------------------------------------
-double dbToLinear (double db)
+double dbToLinear (double db, double floorDb)
 {
-	if (db <= kTrimMinDb)
+	if (db <= floorDb)
 		return 0.0;
 	return std::pow (10.0, db / 20.0);
+}
+
+//------------------------------------------------------------------------
+void bandpassResponse (double centreHz, double bandwidthHz,
+                       double freqHz, double sampleRate,
+                       double& outReal, double& outImag)
+{
+	const double fs = (sampleRate > 0.0) ? sampleRate : 44100.0;
+	const BandpassCoeffs c = bandpassCoeffs (centreHz, bandwidthHz, fs);
+
+	// H(e^jw) evaluated directly from the coefficients, so this is the
+	// response of the filter that actually runs rather than of the
+	// analogue prototype it came from.
+	const double w = 2.0 * M_PI * freqHz / fs;
+	const double cw = std::cos (w), sw = std::sin (w);
+	const double c2w = std::cos (2.0 * w), s2w = std::sin (2.0 * w);
+
+	const double numRe = c.b0 + c.b1 * cw + c.b2 * c2w;
+	const double numIm =      -(c.b1 * sw + c.b2 * s2w);
+	const double denRe = 1.0  + c.a1 * cw + c.a2 * c2w;
+	const double denIm =      -(c.a1 * sw + c.a2 * s2w);
+
+	const double den = denRe * denRe + denIm * denIm;
+	if (den < 1e-30)
+	{
+		outReal = 0.0;
+		outImag = 0.0;
+		return;
+	}
+
+	// (num / den) with a complex denominator, written out rather than
+	// pulled in from <complex> - this header is included by the tests and
+	// by anything that draws a curve, and it stays free of everything it
+	// does not need.
+	outReal = (numRe * denRe + numIm * denIm) / den;
+	outImag = (numIm * denRe - numRe * denIm) / den;
+}
+
+//------------------------------------------------------------------------
+double bandpassMagnitude (double centreHz, double bandwidthHz,
+                          double freqHz, double sampleRate)
+{
+	double re = 0.0, im = 0.0;
+	bandpassResponse (centreHz, bandwidthHz, freqHz, sampleRate, re, im);
+	return std::sqrt (re * re + im * im);
+}
+
+//------------------------------------------------------------------------
+double bankMagnitude (const FormantSetting* formants, int count,
+                      double freqHz, double sampleRate)
+{
+	if (formants == nullptr || count <= 0)
+		return 0.0;
+
+	double sumRe = 0.0, sumIm = 0.0;
+	for (int k = 0; k < count; ++k)
+	{
+		double re = 0.0, im = 0.0;
+		bandpassResponse (formants[k].freqHz, formants[k].bandwidthHz,
+		                  freqHz, sampleRate, re, im);
+
+		// COMPLEX sum, weighted by the formant's own level - see the note
+		// in the header. Summing |H| here instead is the bug the test
+		// suite was written to catch.
+		const double gain = dbToLinear (formants[k].levelDb, kLevelMinDb);
+		sumRe += re * gain;
+		sumIm += im * gain;
+	}
+	return std::sqrt (sumRe * sumRe + sumIm * sumIm);
+}
+
+//------------------------------------------------------------------------
+void Biquad::setBandpass (double centreHz, double bandwidthHz, double sampleRate)
+{
+	const BandpassCoeffs c = bandpassCoeffs (centreHz, bandwidthHz, sampleRate);
+	mB0 = c.b0; mB1 = c.b1; mB2 = c.b2; mA1 = c.a1; mA2 = c.a2;
+}
+
+//------------------------------------------------------------------------
+void Biquad::reset ()
+{
+	mS1 = 0.0;
+	mS2 = 0.0;
 }
 
 //------------------------------------------------------------------------
 void Dsp::setSampleRate (double sampleRate)
 {
 	mSampleRate = (sampleRate > 0.0) ? sampleRate : 44100.0;
-	mTrimCoeff = 1.0 - std::exp (-1.0 / (kTrimSmoothSeconds * mSampleRate));
+	mSmoothCoeff = 1.0 - std::exp (-1.0 / (kSmoothSeconds * mSampleRate));
+	updateCoefficients ();
 }
 
 //------------------------------------------------------------------------
 void Dsp::reset ()
 {
 	snapParameters ();
+	for (Formant& f : mFormant)
+		for (Biquad& b : f.filter)
+			b.reset ();
+}
+
+//------------------------------------------------------------------------
+void Dsp::setFormant (int index, double freqHz, double bandwidthHz, double levelDb)
+{
+	if (index < 0 || index >= kFormantCount)
+		return;
+
+	Formant& f = mFormant[index];
+	f.freqTarget = freqHz;
+	f.bwTarget   = bandwidthHz;
+	f.gainTarget = dbToLinear (levelDb, kLevelMinDb);
+}
+
+//------------------------------------------------------------------------
+void Dsp::setMixPercent (double percent)
+{
+	mMixTarget = std::min (1.0, std::max (0.0, percent / 100.0));
 }
 
 //------------------------------------------------------------------------
 void Dsp::setTrimNormalized (double normalized)
 {
-	mTrimTarget = dbToLinear (trimDb (normalized));
+	mTrimTarget = dbToLinear (trimDb (normalized), kTrimMinDb);
 }
 
 //------------------------------------------------------------------------
 void Dsp::snapParameters ()
 {
+	for (Formant& f : mFormant)
+	{
+		f.freq = f.freqTarget;
+		f.bw   = f.bwTarget;
+		f.gain = f.gainTarget;
+	}
+	mMix  = mMixTarget;
 	mTrim = mTrimTarget;
+
+	updateCoefficients ();
+	mCoeffCountdown = 0;
+}
+
+//------------------------------------------------------------------------
+void Dsp::updateCoefficients ()
+{
+	for (Formant& f : mFormant)
+	{
+		f.filter[0].setBandpass (f.freq, f.bw, mSampleRate);
+		f.filter[1].setBandpass (f.freq, f.bw, mSampleRate);
+	}
+}
+
+//------------------------------------------------------------------------
+int Dsp::tailSamples () const
+{
+	// A resonator's envelope decays as exp(-pi * B * t), so 60 dB takes
+	// about 7 / (pi * B) seconds. Report the NARROWEST formant's tail,
+	// since that is the one still ringing last.
+	double narrowest = kBandwidthMax;
+	for (const Formant& f : mFormant)
+		narrowest = std::min (narrowest, std::max (f.bw, 1.0));
+
+	const double seconds = 7.0 / (M_PI * narrowest);
+	return static_cast<int> (seconds * mSampleRate + 0.5);
 }
 
 //------------------------------------------------------------------------
@@ -75,21 +254,45 @@ void Dsp::process (const float* inLeft, const float* inRight,
 	    outLeft == nullptr || outRight == nullptr)
 		return;
 
-	// Recomputed here rather than assumed, because setSampleRate may not
-	// have been called yet in a standalone test.
-	if (mTrimCoeff <= 0.0)
+	if (mSmoothCoeff <= 0.0)
 		setSampleRate (mSampleRate);
 
 	for (int i = 0; i < frames; ++i)
 	{
 		//----------------------------------------------------------------
-		// THE LINE. Pass-through for now; the ported DSP goes here.
+		// Smooth every target one step. Frequency and bandwidth move the
+		// filter; gain, mix and trim move the arithmetic.
 		//----------------------------------------------------------------
-		double left  = inLeft[i];
-		double right = inRight[i];
+		for (Formant& f : mFormant)
+		{
+			f.freq += (f.freqTarget - f.freq) * mSmoothCoeff;
+			f.bw   += (f.bwTarget   - f.bw)   * mSmoothCoeff;
+			f.gain += (f.gainTarget - f.gain) * mSmoothCoeff;
+		}
+		mMix  += (mMixTarget  - mMix)  * mSmoothCoeff;
+		mTrim += (mTrimTarget - mTrim) * mSmoothCoeff;
 
-		// Output trim, smoothed per sample.
-		mTrim += (mTrimTarget - mTrim) * mTrimCoeff;
+		if (--mCoeffCountdown <= 0)
+		{
+			updateCoefficients ();
+			mCoeffCountdown = kCoeffUpdateSamples;
+		}
+
+		//----------------------------------------------------------------
+		// The bank. Parallel, summed, then mixed against the dry signal.
+		//----------------------------------------------------------------
+		const double dryL = inLeft[i];
+		const double dryR = inRight[i];
+
+		double wetL = 0.0, wetR = 0.0;
+		for (Formant& f : mFormant)
+		{
+			wetL += f.filter[0].process (dryL) * f.gain;
+			wetR += f.filter[1].process (dryR) * f.gain;
+		}
+
+		const double left  = dryL + (wetL - dryL) * mMix;
+		const double right = dryR + (wetR - dryR) * mMix;
 
 		outLeft[i]  = flush (static_cast<float> (left  * mTrim));
 		outRight[i] = flush (static_cast<float> (right * mTrim));

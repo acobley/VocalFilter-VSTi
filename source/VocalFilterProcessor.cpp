@@ -159,6 +159,19 @@ void VocalFilterProcessor::applyParameterChanges (IParameterChanges* changes)
 //------------------------------------------------------------------------
 void VocalFilterProcessor::pushParameters ()
 {
+	// The DSP is handed PLAIN units - hertz, hertz, decibels - not
+	// normalised values, so nothing in VocalFilterDsp has to know what a
+	// ParamID is or what range a host chose to present. The table is the
+	// only place the two representations meet.
+	for (int formant = 0; formant < kFormantCount; ++formant)
+	{
+		mDsp.setFormant (formant,
+		                 plainValue (mParams.data (), formantParam (formant, kFieldFreq)),
+		                 plainValue (mParams.data (), formantParam (formant, kFieldBandwidth)),
+		                 plainValue (mParams.data (), formantParam (formant, kFieldLevel)));
+	}
+
+	mDsp.setMixPercent (plainValue (mParams.data (), kMix));
 	mDsp.setTrimNormalized (mParams[kOutputTrim]);
 }
 

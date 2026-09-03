@@ -3,6 +3,7 @@
 //------------------------------------------------------------------------
 
 #include "VocalFilterController.h"
+#include "VocalFilterEditor.h"
 #include "VocalFilterIDs.h"
 
 #include "base/source/fstreamer.h"
@@ -123,6 +124,59 @@ tresult PLUGIN_API VocalFilterController::setComponentState (IBStream* state)
 		setParamNormalized (kBypass, bypass ? 1.0 : 0.0);
 
 	return kResultOk;
+}
+
+//------------------------------------------------------------------------
+IPlugView* PLUGIN_API VocalFilterController::createView (FIDString name)
+{
+	if (name && FIDStringsEqual (name, ViewType::kEditor))
+		return new VocalFilterEditor (this);
+	return nullptr;
+}
+
+//------------------------------------------------------------------------
+tresult PLUGIN_API VocalFilterController::setParamNormalized (ParamID tag, ParamValue value)
+{
+	const tresult result = EditControllerEx1::setParamNormalized (tag, value);
+	if (result != kResultOk)
+		return result;
+
+	// The host, an automation lane and the panel all arrive here, so this
+	// is the one place a control's position is kept in step with the
+	// parameter behind it.
+	for (auto* editor : mEditors)
+		editor->updateControl (tag, value);
+
+	return result;
+}
+
+//------------------------------------------------------------------------
+void VocalFilterController::editorAttached (EditorView* editor)
+{
+	if (auto* e = dynamic_cast<VocalFilterEditor*> (editor))
+		if (std::find (mEditors.begin (), mEditors.end (), e) == mEditors.end ())
+			mEditors.push_back (e);
+}
+
+//------------------------------------------------------------------------
+void VocalFilterController::editorRemoved (EditorView* editor)
+{
+	editorDestroyed (editor);
+}
+
+//------------------------------------------------------------------------
+void VocalFilterController::editorDestroyed (EditorView* editor)
+{
+	// Do NOT dynamic_cast here. EditorView::~EditorView() is one of the two
+	// callers, and by then the VocalFilterEditor sub-object is gone, so the
+	// cast yields null, the entry survives as a DANGLING POINTER, and the
+	// next setParamNormalized above walks it. Comparing upcast pointers is
+	// well defined at every point in the destruction sequence.
+	mEditors.erase (std::remove_if (mEditors.begin (), mEditors.end (),
+	                                [editor] (VocalFilterEditor* e) {
+		                                return static_cast<EditorView*> (e) == editor;
+	                                }),
+	                mEditors.end ());
 }
 
 //------------------------------------------------------------------------

@@ -1,5 +1,17 @@
 //------------------------------------------------------------------------
 // VocalFilter - the parameter table
+//
+// Every range and default here comes from a constant in VocalFilterDsp.h,
+// so the DSP's idea of what a formant may be and the host's idea cannot
+// drift apart. The factory patch is kAaaFormants - the vowel /a/ as in
+// "father"; the numbers, their sources and why the levels are a choice
+// rather than a consequence are in that header and in PORTING-NOTES
+// section 2.
+//
+// The formants are numbered F1..F3 on the panel and in the host, the way
+// phonetics numbers them, while the array index behind them is 0..2. The
+// rows are written out rather than generated, so a title can be read
+// straight against the id it belongs to.
 //------------------------------------------------------------------------
 
 #include "VocalFilterParams.h"
@@ -7,12 +19,40 @@
 namespace VocalFilter {
 
 //------------------------------------------------------------------------
-// id            title           units  type               plainMin      plainMax      plainDefault     internalMin   internalMax  steps smoothed
+// id                              title           units type              plainMin             plainMax             plainDefault                    internalMin          internalMax          steps smoothed
 //------------------------------------------------------------------------
 const ParamDef kParams[kNumParams] =
 {
-	{ kOutputTrim, "Output Trim", "dB",  ParamType::Float,  kTrimMinDb,   kTrimMaxDb,   kTrimDefaultDb,  kTrimMinDb,   kTrimMaxDb,  0,    true },
+	{ kOutputTrim,                  "Output Trim",  "dB", ParamType::Float, kTrimMinDb,          kTrimMaxDb,          kTrimDefaultDb,                 kTrimMinDb,          kTrimMaxDb,          0,    true },
+
+	{ kF1Freq,                      "F1  Freq",     "Hz", ParamType::Float, kFormantFreqMin[0],  kFormantFreqMax[0],  kAaaFormants[0].freqHz,         kFormantFreqMin[0],  kFormantFreqMax[0],  0,    true },
+	{ kF1Bandwidth,                 "F1  Width",    "Hz", ParamType::Float, kBandwidthMin,       kBandwidthMax,       kAaaFormants[0].bandwidthHz,    kBandwidthMin,       kBandwidthMax,       0,    true },
+	{ kF1Level,                     "F1  Level",    "dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[0].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    true },
+
+	{ kF2Freq,                      "F2  Freq",     "Hz", ParamType::Float, kFormantFreqMin[1],  kFormantFreqMax[1],  kAaaFormants[1].freqHz,         kFormantFreqMin[1],  kFormantFreqMax[1],  0,    true },
+	{ kF2Bandwidth,                 "F2  Width",    "Hz", ParamType::Float, kBandwidthMin,       kBandwidthMax,       kAaaFormants[1].bandwidthHz,    kBandwidthMin,       kBandwidthMax,       0,    true },
+	{ kF2Level,                     "F2  Level",    "dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[1].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    true },
+
+	{ kF3Freq,                      "F3  Freq",     "Hz", ParamType::Float, kFormantFreqMin[2],  kFormantFreqMax[2],  kAaaFormants[2].freqHz,         kFormantFreqMin[2],  kFormantFreqMax[2],  0,    true },
+	{ kF3Bandwidth,                 "F3  Width",    "Hz", ParamType::Float, kBandwidthMin,       kBandwidthMax,       kAaaFormants[2].bandwidthHz,    kBandwidthMin,       kBandwidthMax,       0,    true },
+	{ kF3Level,                     "F3  Level",    "dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[2].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    true },
+
+	{ kMix,                         "Dry / Wet",    "%",  ParamType::Float, kMixMin,             kMixMax,             kMixDefault,                    kMixMin,             kMixMax,             0,    true },
 };
+
+//------------------------------------------------------------------------
+// The table is written by hand, so prove it is in id order and that
+// formantParam() agrees with it - at COMPILE time, because a row in the
+// wrong place is exactly the kind of mistake that presents as "the width
+// slider moves the level".
+//------------------------------------------------------------------------
+static_assert (kNumParams == 11, "eleven parameters: trim, 3 x 3 formant, mix");
+static_assert (formantParam (0, kFieldFreq)      == kF1Freq,      "F1 freq id");
+static_assert (formantParam (0, kFieldBandwidth) == kF1Bandwidth, "F1 width id");
+static_assert (formantParam (0, kFieldLevel)     == kF1Level,     "F1 level id");
+static_assert (formantParam (1, kFieldFreq)      == kF2Freq,      "F2 freq id");
+static_assert (formantParam (2, kFieldFreq)      == kF3Freq,      "F3 freq id");
+static_assert (formantParam (2, kFieldLevel)     == kF3Level,     "F3 level id");
 
 //------------------------------------------------------------------------
 const ParamDef& paramDef (Steinberg::Vst::ParamID id)

@@ -1,0 +1,196 @@
+//------------------------------------------------------------------------
+// VocalFilter - custom VSTGUI controls
+//
+// LIFTED VERBATIM from ~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.*,
+// with three changes and no others:
+//
+//   * the namespace is VocalFilter;
+//   * the vocoder-specific views are gone - SpyFileButton, SpyPatchBoard,
+//     SpyLedColumn, SpyBandMeter and IPatchBoardListener, none of which
+//     has anything to model here;
+//   * this comment.
+//
+// THE CLASS NAMES ARE DELIBERATELY UNCHANGED. SpySlider is still
+// SpySlider, so `diff` against SpyBand's copy shows only what genuinely
+// differs and a fix made in either can be carried to the other by hand.
+// Renaming them would buy tidiness and cost that.
+//
+// The DXi's property page these came from used no bitmaps at all: every
+// control drew itself with GDI rectangles and text over the panel, which
+// is why they port at all. The colours are the originals, taken from
+// SlideSpin::PaintBk rather than matched by eye.
+//------------------------------------------------------------------------
+
+#pragma once
+
+#include "vstgui/vstgui.h"
+
+#include <functional>
+#include <string>
+#include <vector>
+
+namespace VocalFilter {
+
+//------------------------------------------------------------------------
+// The original's palette
+//------------------------------------------------------------------------
+namespace Colours {
+
+const VSTGUI::CColor kBarLight   (200, 200, 200, 255);  // Draw3dRect top-left
+const VSTGUI::CColor kBarHigh    (255, 255, 255, 255);  // Draw3dRect bottom-right
+const VSTGUI::CColor kBarFill    (100, 100, 100, 255);
+const VSTGUI::CColor kLabel      ( 50, 255,  50, 255);  // SetTextColor, green
+const VSTGUI::CColor kValue      (192,  50,  50, 255);  // DrawTheText, red
+const VSTGUI::CColor kLampOn     (255,   0,   0, 255);
+const VSTGUI::CColor kLampOff    (  0,   0,   0, 255);
+const VSTGUI::CColor kLampFrame  (100, 100, 100, 255);
+const VSTGUI::CColor kGrid       (200, 200, 200, 255);
+const VSTGUI::CColor kGridBorder (100, 255, 100, 255);
+const VSTGUI::CColor kOuterBorder(100, 100, 100, 255);
+const VSTGUI::CColor kPin        (255,   0,   0, 255);
+const VSTGUI::CColor kTrace      (127, 200, 255, 255);  // DrawArea's polyline
+
+} // namespace Colours
+
+/** MFC's CreatePointFont(80) - Arial at 8 points. */
+VSTGUI::CFontRef panelFont ();
+
+/** The same face one and two sizes down, for a label too long for its
+    control. Six of the DXi's labels are wider than the control they name -
+    "Unvoiced Noise Level" wants 95 pixels and has 82 - and DT_WORDBREAK
+    wrapped them into an 11-pixel band, which clipped the second line.
+    Dropping a size instead is the porting guide's advice and it is what
+    these are for. */
+VSTGUI::CFontRef panelFontSmall ();
+VSTGUI::CFontRef panelFontTiny ();
+
+//------------------------------------------------------------------------
+/** A SlideSpin in its ordinary mode: drag left and right.
+
+    The DXi moved the value by ONE unit of a 0..100 range per pixel of
+    horizontal movement, in either direction, with no absolute
+    positioning - clicking did not jump the value to the pointer. That is
+    preserved, because on a control 69 pixels wide an absolute drag would
+    make every setting a coarse one. */
+class SpySlider : public VSTGUI::CControl
+{
+public:
+	SpySlider (const VSTGUI::CRect& size, VSTGUI::IControlListener* listener, int32_t tag);
+
+	/** The green text under the bar - the DXi's SetLabel. */
+	void setLabel (const std::string& label);
+
+	/** The red text across the middle - the DXi's SetValue, which the
+	    property page filled in on a timer with a frequency reading. Empty
+	    means the numeric value is shown instead, which is what the DXi
+	    did when m_Value was empty. */
+	void setValueText (const std::string& text);
+
+	/** The 10 x 10 lamp in the top-left corner - SetUseIndicator. */
+	void setUseIndicator (bool use);
+	void setIndicator (bool on);
+	bool indicator () const { return mIndicator; }
+
+	/** How the numeric value reads when there is no value text. Given the
+	    NORMALISED value; the editor hands it the parameter's own
+	    formatting so the panel and the host cannot disagree. */
+	void setFormatter (std::function<std::string (float)> formatter);
+
+	void draw (VSTGUI::CDrawContext* context) override;
+
+	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
+	void onMouseMoveEvent (VSTGUI::MouseMoveEvent& event) override;
+	void onMouseUpEvent (VSTGUI::MouseUpEvent& event) override;
+	void onMouseCancelEvent (VSTGUI::MouseCancelEvent& event) override;
+	void onMouseWheelEvent (VSTGUI::MouseWheelEvent& event) override;
+
+	CLASS_METHODS (SpySlider, VSTGUI::CControl)
+
+protected:
+	void drawLamp (VSTGUI::CDrawContext* context);
+	void drawBar (VSTGUI::CDrawContext* context, double fraction, bool fill);
+	void drawLabel (VSTGUI::CDrawContext* context, const std::string& text,
+	                const VSTGUI::CColor& colour);
+	/** Draw `text` centred at the TOP of `band`, dropping a font size
+	    rather than letting it run past the edges. */
+	void drawFitted (VSTGUI::CDrawContext* context, const std::string& text,
+	                 const VSTGUI::CRect& band, const VSTGUI::CColor& colour);
+
+	std::string mLabel;
+	std::string mValueText;
+	std::function<std::string (float)> mFormatter;
+	bool mUseIndicator = false;
+	bool mIndicator = false;
+
+	bool mDragging = false;
+	VSTGUI::CPoint mLastPoint;
+};
+
+//------------------------------------------------------------------------
+/** A SlideSpin in two-state mode: a click toggles it.
+
+    The bar fills the whole width when on and disappears when off, and the
+    text under it is the name of the state rather than a label - "Use
+    Sample" against "Interlace". */
+class SpyToggle : public SpySlider
+{
+public:
+	SpyToggle (const VSTGUI::CRect& size, VSTGUI::IControlListener* listener, int32_t tag);
+
+	void setStateNames (const std::string& off, const std::string& on);
+
+	void draw (VSTGUI::CDrawContext* context) override;
+	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
+	void onMouseMoveEvent (VSTGUI::MouseMoveEvent& event) override;
+	void onMouseUpEvent (VSTGUI::MouseUpEvent& event) override;
+	void onMouseWheelEvent (VSTGUI::MouseWheelEvent& event) override;
+
+	CLASS_METHODS (SpyToggle, SpySlider)
+
+private:
+	std::string mNames[2];
+};
+
+//------------------------------------------------------------------------
+/** A SlideSpin in multi-state mode: an outlined box with the name of the
+    current value across it.
+
+    LEFT CLICK STEPS DOWN, RIGHT CLICK STEPS UP, and both wrap. Ctrl-click
+    counts as a right click, which is the macOS convention and a fallback
+    for hosts that keep the right button to themselves.
+
+    NOT the DXi, which had no click behaviour at all: its vertical mode
+    needed the pointer to move 25 pixels before it did anything, on a
+    control 18 pixels tall, so the control read as dead until you happened
+    to drag it. See PORTING-NOTES section 3.
+
+    The drag is still there and still works the original's way round -
+    DOWN ADVANCES, because the DXi decremented a counter it then reported
+    as `max - count`, which is the opposite of the usual convention and is
+    preserved. The wheel advances upwards, one position per click. */
+class SpySelector : public SpySlider
+{
+public:
+	SpySelector (const VSTGUI::CRect& size, VSTGUI::IControlListener* listener, int32_t tag);
+
+	void setNames (const std::vector<std::string>& names);
+
+	void draw (VSTGUI::CDrawContext* context) override;
+	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
+	void onMouseMoveEvent (VSTGUI::MouseMoveEvent& event) override;
+	void onMouseUpEvent (VSTGUI::MouseUpEvent& event) override;
+	void onMouseWheelEvent (VSTGUI::MouseWheelEvent& event) override;
+
+	CLASS_METHODS (SpySelector, SpySlider)
+
+private:
+	int currentIndex () const;
+
+	std::vector<std::string> mNames;
+	VSTGUI::CCoord mAnchorY = 0.;
+	bool mMoved = false;
+	bool mStepUp = false;
+};
+
+//------------------------------------------------------------------------
+} // namespace VocalFilter

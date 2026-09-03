@@ -6,21 +6,32 @@ measurement here turns out to be wrong, correct it in place and say so.
 
 ---
 
-## 0. What this is, as of the first commit
+## 0. What this is
 
-A new plug-in scaffolded from `~/DXi-DEv/vst3-port-template`, **not yet a
-port of anything**. There is no DXi behind it: the audio line is a
-pass-through with an output trim, and every ported decision below is
-therefore still open.
+A plug-in scaffolded from `~/DXi-DEv/vst3-port-template`, **not a port of
+anything** — there is no DXi behind it. The audio line is a three-formant
+vocal-tract model: on each channel, three bandpass resonators in parallel,
+summed, mixed against the dry signal and trimmed.
 
 | Decision | Settled as | Why |
 |---|---|---|
 | Kind | **Audio effect**, `PlugType::kFx` | stereo in / stereo out, no event input, nothing reads a MIDI queue |
-| Buses | **Stereo in, stereo out, and nothing else** | asked for; `setBusArrangements` refuses every other layout and `resource/au-info.plist` lists only `2/2` to match — auval is strict about the two agreeing |
+| Buses | **Stereo in, stereo out, and nothing else** | `setBusArrangements` refuses every other layout and `resource/au-info.plist` lists only `2/2` to match — auval is strict about the two agreeing |
 | Sample formats | 32- and 64-bit accepted | the line is float, as these plug-ins were; a 64-bit host is converted through `mScratchIn/Out` rather than refused |
-| Editor | **None yet** | guide step 6: get a silent plug-in validating — processor, controller, entry — and fix everything there, while there is little code to search. The editor is built last |
-| Custom controls | **None yet** | see "Building the editor" below for where the SpyBand set lives when you want it |
-| Parameters | one, `kOutputTrim` | a placeholder that proves host → parameter → DSP end to end |
+| Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
+| Parameters | eleven: 3 × (freq, width, level), dry/wet, output trim | section 2 |
+| Editor | **Yes** | the silent shell was validated first — guide step 6 — and the panel came afterwards |
+| Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand | section 4 |
+
+```
+     in --+--> BP(F1, B1) * A1 --+
+          |                      |
+          +--> BP(F2, B2) * A2 --+--> wet --+
+          |                      |          |
+          +--> BP(F3, B3) * A3 --+          +--> mix --> trim --> out
+          |                                 |
+          +--------- dry -------------------+
+```
 
 ### Identity — permanent from the first shipped build
 
@@ -43,65 +54,153 @@ session silently loses the plug-in.
 VST3 header may enter it. Two reasons:
 
 * it compiles and runs standalone with plain `c++ -std=c++17`, so its numbers
-  can be tested for real long before the plug-in is built — `tests/` does
-  exactly that;
+  can be tested for real — `tests/` measures the actual magnitude response
+  and checks where the peaks land;
 * VST3 splits the processor and the controller into separate components, so
   anything the editor displays that the DSP computes must come from **one
-  shared function both call**. `trimDb()` and `dbToLinear()` are the first
-  two. A private copy in the editor will diverge at some sample rate you
-  never test.
+  shared function both call**. `trimDb`, `dbToLinear`, `bandpassResponse`,
+  `bandpassMagnitude` and `bankMagnitude` are those functions.
+
+The processor hands the DSP **plain units** — hertz, hertz, decibels — never
+normalised values, so nothing in `VocalFilterDsp` has to know what a `ParamID`
+is or what range a host was shown. The parameter table is the only place the
+two representations meet.
+
+### The filter
+
+RBJ cookbook bandpass, **constant 0 dB peak gain** form (`b0 = alpha`, *not*
+`b0 = Q*alpha`). The other spelling makes the peak gain equal to Q, so
+narrowing a formant would make it louder and the Width slider would be
+arguing with the Level slider. `tests/DspTests.cpp` section 4 measures the
+peak at three bandwidths and requires it to stay within 0.15 dB of unity,
+which is the assertion that catches it.
 
 Everything rate-dependent is recomputed in `setSampleRate`, never inside
-`process`: a hard-coded coefficient puts its corner at a fixed fraction of
-Nyquist, so the same patch is over an octave brighter at 96 k than at 44.1 k.
+`process`. Section 5 of the suite sweeps 44.1 k to 192 k and requires the
+response at the three formant centres to stay within 0.25 dB.
 
-### Output level, measured before anything was played
+Coefficients are recomputed **every 16 samples** rather than every sample — a
+biquad update is a sin and a cos — while the parameters feeding them are
+smoothed **per sample** over 20 ms. Slamming F2 end to end every 64 samples
+moves the output by at most 0.04 between adjacent samples.
 
-`tests/DspTests.cpp`, default patch, full-scale 440 Hz / 660 Hz stereo sine:
+Two clamps, and both are load-bearing: the centre frequency is held below
+0.45 × Nyquist, where the bilinear transform's warping stops a bandpass
+behaving like one, and **Q is capped at 60**. Nothing stops a host automating
+Width to its minimum while Freq is at its maximum, which is a Q of 200 and a
+filter that rings for a second and a half.
 
-```
-peak L 1.000000 (-0.00 dBFS)   peak R 0.999998 (-0.00 dBFS)
-```
+### DEVIATION 1 — `bankMagnitude` sums COMPLEX responses, and had to be told to
 
-Unity, as a pass-through must be. **This measurement is the one to repeat
-first when the real DSP goes in**, at 1, 2, 4, 8 and 16 voices if it turns
-out to be polyphonic. These plug-ins predate loudness discipline and their
-gain staging often cancels itself; a level that clips masks other faults and
-sends you chasing the wrong bug — velocity appears not to work, and attacks
-get reported as clicks.
+The first version of the response function summed the three formants'
+**magnitudes**. The test that compares the running filter's measured impulse
+response against the curve the editor would draw failed at **0.255 absolute,
+at 997 Hz** — a quarter of full scale, right in the valley between F1 and F2.
 
-The trim's top of travel is currently 0 dB. For a real port, **make the top
-of travel the ORIGINAL's staging** — nothing lost, one turn away — and set
-the default 20 dB below it. `kTrimMaxDb` and `kTrimDefaultDb` in
-`VocalFilterDsp.h` are the two constants to move.
+The cause is that a bandpass runs from +90° below its centre to −90° above,
+so at 997 Hz the F1 branch is most of a half-turn away from the F2 branch and
+the two partly cancel. **The dip between two formants is where it is because
+of the phase between them.** Summing magnitudes puts it in the wrong place
+and makes it far too shallow.
 
-The trim is smoothed per **sample** (one-pole, 10 ms). A block-rate step on a
-mixed output is itself a click; the suite asserts no single sample of a
-full-travel move jumps by more than 1 %.
+With the complex sum the same test reads **4.29e-09**. This is the porting
+guide's warning about a suite that compared only magnitudes while the
+transcription quietly computed phases nobody looked at — the same trap, found
+by writing the test first.
 
 ---
 
-## 2. Parameters
+## 2. Parameters, and the Aaa patch
 
-`VocalFilterParams.h` carries the three-range shape the SpaceDub, ForTran and
-SpyBand ports all settled on: VST3 normalised, the DXi **external** range so
-displayed numbers match the original, and the DXi **internal** range via
-`toInternal()` reproducing `MapToInternal` so the DSP is handed numerically
-identical values. There is no DXi here yet, so for `kOutputTrim` internal ==
-plain — say so explicitly for each real parameter as it lands, and mark every
-departure from the original table as a **DEVIATION** in this file.
+Eleven, in id order. `kOutputTrim` is still **id 0** and so heads the host's
+list, because the formant parameters were **appended** to it rather than
+inserted before it: an id that moves loads a saved project's value into the
+wrong control, and list order is a far smaller price than that.
 
-Two rules that cost real time elsewhere:
+```
+ 0  Output Trim   dB   -60 .. 0        default   0
+ 1  F1 Freq       Hz   200 .. 1200     default 730
+ 2  F1 Width      Hz    20 .. 400      default  80
+ 3  F1 Level      dB   -40 .. +12      default   0
+ 4  F2 Freq       Hz   500 .. 3000     default 1090
+ 5  F2 Width      Hz    20 .. 400      default  90
+ 6  F2 Level      dB   -40 .. +12      default  -7
+ 7  F3 Freq       Hz  1500 .. 4000     default 2440
+ 8  F3 Width      Hz    20 .. 400      default 120
+ 9  F3 Level      dB   -40 .. +12      default -12
+10  Dry / Wet      %     0 .. 100      default 100
+```
 
-* **Append new parameters, never insert.** An id that moves loads a saved
-  project's value into the wrong control.
-* **`kBypass` is 1000**, far past the end of the table. Everything that
-  indexes `kParams` range-checks first; `paramDef()` does it for you.
+`kBypass` is 1000, far past the end of the table; everything that indexes
+`kParams` range-checks first. `formantParam(formant, field)` is the only
+place the `base + n*3 + field` arithmetic lives, and `VocalFilterParams.cpp`
+holds `static_assert`s that prove it agrees with the hand-written table — a
+row in the wrong place is exactly the kind of mistake that presents as *"the
+Width slider moves the Level"*.
 
-`setState` resets anything a **short** stream does not mention back to its
-default. Without that, loading an old project after a new one inherits the
-new one's settings for every parameter added since. The processor and the
-controller read the identical layout — if one changes, both change.
+Every range is **linear in its plain unit**, so `RangeParameter` round-trips
+`getParamStringByValue` / `getParamValueByString` exactly and no `toString` /
+`fromString` override is needed. If a non-linear mapping is ever wanted,
+override **both**, and make it exact at the default: the validator round-trips
+each parameter at its current value and warns above 1e-4.
+
+### Each formant gets its own frequency range
+
+Not one wide range shared by all three. A slider spanning 100 Hz to 4 kHz
+wastes most of its travel on settings that are not a vowel, and per-formant
+ranges keep F1 < F2 < F3 without a constraint to enforce. They are generous
+enough for every English vowel and then some.
+
+### The factory patch: /ɑ/ as in "father"
+
+| | F1 | F2 | F3 |
+|---|---|---|---|
+| Frequency | 730 Hz | 1090 Hz | 2440 Hz |
+| Bandwidth | 80 Hz | 90 Hz | 120 Hz |
+| Level | 0 dB | −7 dB | −12 dB |
+
+**Frequencies** are the classic adult-male means from Peterson & Barney
+(1952). Women and children run higher — roughly 850 / 1220 / 2810 for
+women — so this patch is a **male** /ɑ/ specifically, and F2 in particular is
+what makes it /ɑ/ rather than /ɔ/ or /æ/.
+
+**Bandwidths** sit mid-range of the measured adult values. The published
+spread is wide and method-dependent: about 50–140 Hz for B1, 62–149 for B2
+and 67–223 for B3 across studies, so 80 / 90 / 120 is a defensible middle
+rather than any one paper's number.
+
+**Levels are the part a parallel bank makes you choose.** They do not follow
+from the frequencies the way they would in a cascade — they are set. F1
+dominates in a low back vowel, so the higher formants are stepped down from
+it. These are a starting point for the ear, not a measurement.
+
+Measured peaks, from the running filter's impulse response: **728, 1100 and
+2452 Hz** — within 0.9 % of what was asked for. The error is the bilinear
+transform's frequency warping plus the 1 Hz search grid, and it is well under
+the ~5 % that would start to read as a different vowel.
+
+### Output level, measured before anything was played
+
+Full-scale input, factory patch:
+
+```
+  sine  110 Hz  ->  -29.13 dBFS        saw   82.4 Hz  ->  -12.44 dBFS
+  sine  220 Hz  ->  -23.80 dBFS        saw  110.0 Hz  ->  -12.87 dBFS
+  sine  730 Hz  ->   +0.05 dBFS        saw  146.8 Hz  ->  -11.60 dBFS
+  sine 1090 Hz  ->   -6.37 dBFS
+  sine 2440 Hz  ->  -11.72 dBFS
+```
+
+The only case that reaches unity is a sine sitting **exactly** on F1, which is
+what a 0 dB constant-peak bandpass is supposed to do. A harmonically rich
+source — the input this is actually for — comes out around −12 dBFS, because
+a formant bank throws most of the spectrum away. So the trim's top of travel
+stays at unity and its default stays there with it; there is no gain staging
+to be 20 dB below, because there is no original.
+
+Nothing clips inside a float plug-in, but this is the measurement to repeat
+first after any change to the levels or the topology. A level that clips masks
+other faults and sends you chasing the wrong bug.
 
 ---
 
@@ -112,46 +211,68 @@ opt-in and the default is *no flags*, so a plug-in that reads
 `data.processContext->tempo` without asking gets 120 in every host, with no
 error anywhere — the validator prints `ProcessContextRequirements: - None`
 rather than complaining. Nothing here syncs to anything. The moment something
-does, add `processContextRequirements.needTempo ();` to the processor's
-constructor.
+does (an LFO on F1, say), add `processContextRequirements.needTempo ();` to
+the processor's constructor.
 
-**No processor → controller messages.** When you add one, remember every
-message travels on the **UI thread**: `sendMessage` from `process()` returns
-success and is then silently discarded by the host's connection proxy.
-Per-block values from the DSP go out through `data.outputParameterChanges`
-with a `kIsReadOnly` parameter instead. Messages are fine from `setActive`,
-`setState` and `notify`.
+**No processor → controller messages.** When you add one — a response curve
+or a level meter would want one — remember every message travels on the **UI
+thread**: `sendMessage` from `process()` returns success and is then silently
+discarded by the host's connection proxy. Per-block values from the DSP go out
+through `data.outputParameterChanges` with a `kIsReadOnly` parameter instead.
+Messages are fine from `setActive`, `setState` and `notify`.
 
-**No editor.** See below.
+**`getTailSamples` is real now.** A resonator decays as exp(−π·B·t), so 60 dB
+takes about 7/(π·B) seconds; the narrowest formant's tail is reported, which is
+28 ms at the factory patch. A host that cuts processing at the end of a region
+would otherwise chop the ring off.
 
 ---
 
-## 4. Building the editor, when you get there
+## 4. The editor
 
-The controller has an `EDITOR HOOK` block listing the five overrides to add
-and the order to add them in.
+`source/VocalFilterControls.{h,cpp}` is **lifted verbatim** from
+`~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.*`, with three changes and no
+others: the namespace is `VocalFilter`; the vocoder-specific views are gone
+(`SpyFileButton`, `SpyPatchBoard`, `SpyLedColumn`, `SpyBandMeter`,
+`IPatchBoardListener`); and the banner says so.
 
-The trap worth reading twice is in `editorDestroyed`: **`dynamic_cast`
-returns null inside `~EditorView()`**, which is one of its two callers.
-Compare upcast pointers — `static_cast<EditorView*> (e) == editor` — or the
-editor list keeps a dangling pointer that the next `setParamNormalized`
-follows.
+**The class names are deliberately unchanged.** `SpySlider` is still
+`SpySlider`, so `diff` against SpyBand's copy shows only what genuinely
+differs and a fix made in either can be carried to the other by hand.
+Renaming them would buy tidiness and cost that.
 
-**The SpyBand control set is the nearest model** and is designed to be
-lifted: `~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.{h,cpp}` holds
+They port at all because the DXi property page these came from **used no
+bitmaps**: every control drew itself with GDI rectangles and text over the
+panel. The colours in `namespace Colours` are the originals, taken from
+`SlideSpin::PaintBk` rather than matched by eye.
 
-* `SpySlider` — horizontal drag slider, progress bar, green label, red value
-* `SpyToggle` — two-state
-* `SpySelector` — multi-state, left click steps down, right click steps up
-* `SpyFileButton`, `SpyPatchBoard`, `SpyLedColumn`, `SpyBandMeter`
+`VocalFilterEditor` has no `.rc` behind it and no artwork to recover, so
+unlike the SpyBand and ForTran editors nothing is converted from dialog
+units: the layout is in pixels, computed from one grid, and the grid
+constants in the header are the only thing to change to resize the panel. A
+column per formant and a row per field — F1 F2 F3 across, Freq / Width /
+Level down — because **a vowel is a shape across that grid** and putting the
+three side by side is what makes one legible at a glance. Dry/Wet and Output
+Trim take a bottom row of their own.
 
-none of which is a bitmap — every one draws itself with shapes and text, so
-there is no artwork to recover. Copy the file, rename the namespace, and keep
-`SpyBandEditor.{h,cpp}` open beside it as the worked example of wiring them
-to parameters. `~/DXi-DEv/ForTran-VSTi/` is the larger example: 145
-parameters and a bitmap UI rebuilt from the `.rc`.
+Each slider's readout is formatted from the **same table the host reads**, so
+the panel and the host cannot disagree about what a control says.
 
-Two VSTGUI traps that will bite immediately:
+The background is a colour, not a bitmap: `CColor(64,64,64)`, which is
+SpyBand's own fallback — the colour its editor paints *under* the artwork so
+a missing file reads as a dark panel rather than as whatever the host left in
+the window.
+
+### The trap in `editorDestroyed`
+
+**`dynamic_cast` returns null inside `~EditorView()`**, which is one of its two
+callers. By then the `VocalFilterEditor` sub-object is gone, the cast yields
+null, the entry survives as a dangling pointer, and the next
+`setParamNormalized` walks it. `VocalFilterController::editorDestroyed`
+compares **upcast** pointers instead, which is well defined at every point in
+the destruction sequence. This one cost real time on SpaceDub.
+
+Two more that will bite the moment this panel grows a container:
 
 * **`CViewContainer::drawRect` never calls `draw()`.** A `draw()` override on
   a container is dead code that compiles and produces nothing. Override
@@ -171,18 +292,24 @@ build.** What *was* run, and what to re-run after any scripted edit:
 
 ```sh
 # every translation unit, semantically checked against the vendored SDK
-SDK=~/DXi-DEv/SpyBand-VSTi/external/vst3sdk
+SDK=external/vst3sdk
 for f in source/*.cpp; do
-  g++ -c -std=c++17 -DLINUX=1 -DRELEASE=1 -I$SDK -I$SDK/vstgui4 -Isource \
-      -o /tmp/$(basename $f .cpp).o $f || echo "FAILED $f"
+  g++ -c -std=c++17 -Wall -Wextra -Wno-multichar -Wno-unused-parameter \
+      -DLINUX=1 -DRELEASE=1 -I$SDK -I$SDK/vstgui4 -Isource \
+      -o /tmp/$(basename $f .cpp).o $f 2>/tmp/$(basename $f).log
 done
 nm -C /tmp/*.o | grep " U " | grep VocalFilter::   # must all be defined elsewhere
 ```
 
+Seven translation units, **zero errors and zero warnings in our own sources**,
+every undefined `VocalFilter::` symbol defined in another object.
+
 `-DRELEASE=1` is required or `fdebug.h` refuses to compile. Compile to an
 **object file** and `nm -C` it rather than using `-fsyntax-only`: a scripted
 edit that matched nothing leaves a header declaring a function no one
-defined, and syntax-only will not catch it.
+defined, and syntax-only will not catch it. Do not pipe the compiler into
+`head` — the closed pipe kills it with SIGPIPE and you get a missing object
+file and no error message.
 
 The DSP suite:
 
@@ -191,13 +318,28 @@ c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-All fourteen assertions pass as of the first commit. Test 4 is a **negative
-control** for test 3 — a guard that has never failed is a guess.
+Twenty assertions, all passing. The ones worth knowing about:
 
-**Before shipping**, run the SDK validator and
-`auval -v aufx VcFl AECo`. Debug a validator segfault with
-`lldb -- build/bin/Debug/validator <bundle>`; the usual cause is a null title
-or units reaching `RangeParameter`, which dereferences both without a check.
+* **§3 compares the RUNNING filter against the curve the editor would DRAW**,
+  across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
+  DEVIATION 1.
+* **§4 proves the peak gain is constant** across bandwidths, and that the
+  measured −3 dB width is the width that was asked for, within 6 %.
+* **§6 is a no-op proof with a negative control**: at Dry/Wet 0 % the filters
+  still run and the output must be **bit-identical** to the input; at 100 % it
+  must not be. A guard that has never failed is a guess.
+* **§8 drives every extreme of every range at four sample rates** with
+  full-scale noise and requires the output to stay finite and bounded.
+
+Compare spectra, not samples, when a filter changes: four poles delay the
+signal even where their magnitude is flat, so two runs with identical spectra
+differ at every sample and a sample-difference test would fail on a correct
+change.
+
+**Before shipping**, run the SDK validator and `auval -v aufx VcFl AECo`.
+Debug a validator segfault with `lldb -- build/bin/Debug/validator <bundle>`;
+the usual cause is a null title or units reaching `RangeParameter`, which
+dereferences both without a check.
 
 ---
 
@@ -217,17 +359,11 @@ tree is either buildable on its own or it is not. `external/` is
 `.gitignore`d, so this costs disk and a few minutes on the first configure,
 nothing in the repo.
 
-The build was run and both bundles are in place:
-
-```
-build/VST3/Release/VocalFilter.vst3
-build/VST3/Release/VocalFilter.component
-build/VST3/Debug/VocalFilter.vst3
-```
-
 Sources are globbed with `CONFIGURE_DEPENDS`, so there is no file list to
 maintain — at the cost of one wrinkle under the Xcode generator: the first
 build after you **add** a source file compiles the old file list anyway, and
 the SDK post-build check reports *"Bundle does not export the required
 'GetPluginFactory' function"*. A PRE_BUILD check catches it and names what
-changed; re-run `./setup-xcode.sh --no-open` and build again.
+changed; re-run `./setup-xcode.sh --no-open` and build again. **This applies
+now** — `VocalFilterControls.cpp` and `VocalFilterEditor.cpp` are new since
+the last configure.
