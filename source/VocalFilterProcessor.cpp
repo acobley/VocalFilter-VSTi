@@ -163,6 +163,13 @@ void VocalFilterProcessor::pushParameters ()
 	// normalised values, so nothing in VocalFilterDsp has to know what a
 	// ParamID is or what range a host chose to present. The table is the
 	// only place the two representations meet.
+	// GLIDE FIRST. setFormant reads the glide length when it starts a
+	// ramp, so a block that changes both the glide time and a vowel must
+	// have the new length in hand before the vowel is pushed - otherwise
+	// the first transition after moving the Glide slider uses the old
+	// time and the control looks like it lags by one change.
+	mDsp.setGlideMs (plainValue (mParams.data (), kGlide));
+
 	for (int formant = 0; formant < kFormantCount; ++formant)
 	{
 		mDsp.setFormant (formant,

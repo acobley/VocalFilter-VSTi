@@ -500,6 +500,217 @@ int main ()
 	}
 
 	//--------------------------------------------------------------------
+	section ("8b. GLIDE: nine parameters, one arrival");
+	//--------------------------------------------------------------------
+	{
+		// The requirement in one test: change vowel, and every one of the
+		// nine formant parameters must reach its target ON THE SAME
+		// SAMPLE, however far it had to travel. Uuuu -> Eeee is the
+		// cruellest pair in the table: F2 moves 1420 Hz while B2 moves
+		// 10 Hz, a ratio of 142 to 1.
+		for (double glideMs : { 0.0, 50.0, 150.0, 500.0, 2000.0 })
+		{
+			Dsp dsp;
+			dsp.setSampleRate (kRate);
+			dsp.setGlideMs (glideMs);
+			applyPatch (dsp, kVowels[4].formants);      // Uuuu
+			dsp.reset ();
+
+			// Aim at Eeee, then walk one sample at a time and note when
+			// each of the nine stops moving.
+			applyPatch (dsp, kVowels[1].formants);      // Eeee
+
+			const int expected = static_cast<int> (
+				std::max (glideMs, kGlideFloorMs) * 0.001 * kRate + 0.5);
+
+			int arrived[kFormantCount][3];
+			for (auto& row : arrived) for (int& a : row) a = -1;
+
+			float in = 0.0f, outL = 0.0f, outR = 0.0f;
+			const int limit = expected + 64;
+			for (int n = 1; n <= limit; ++n)
+			{
+				dsp.process (&in, &in, &outL, &outR, 1);
+				for (int k = 0; k < kFormantCount; ++k)
+				{
+					const double want[3] = { kVowels[1].formants[k].freqHz,
+					                         kVowels[1].formants[k].bandwidthHz,
+					                         dbToLinear (kVowels[1].formants[k].levelDb,
+					                                     kLevelMinDb) };
+					const double have[3] = { dsp.formantFreq (k),
+					                         dsp.formantBandwidth (k),
+					                         dsp.formantGain (k) };
+					for (int j = 0; j < 3; ++j)
+						if (arrived[k][j] < 0 && have[j] == want[j])
+							arrived[k][j] = n;
+				}
+			}
+
+			// ONLY THE ONES THAT HAVE TO MOVE. Two things here do not:
+			// the levels are one shared profile across all five vowels, and
+			// - the reason this test failed when it was first written -
+			// Uuuu and Eeee happen to share a 50 Hz B1. A parameter
+			// already at its target is at its target on sample 1, which is
+			// correct and is not an arrival.
+			bool together = true;
+			int first = -1, movers = 0;
+			for (int k = 0; k < kFormantCount; ++k)
+			{
+				const double from[3] = { kVowels[4].formants[k].freqHz,
+				                         kVowels[4].formants[k].bandwidthHz,
+				                         kVowels[4].formants[k].levelDb };
+				const double to[3]   = { kVowels[1].formants[k].freqHz,
+				                         kVowels[1].formants[k].bandwidthHz,
+				                         kVowels[1].formants[k].levelDb };
+				for (int j = 0; j < 3; ++j)
+				{
+					if (from[j] == to[j])
+						continue;                      // never moved
+					++movers;
+					if (first < 0) first = arrived[k][j];
+					if (arrived[k][j] != first) together = false;
+				}
+			}
+
+			char label[128];
+			std::snprintf (label, sizeof (label),
+			               "glide %6.0f ms: all %d movers arrive at sample %d (want %d)",
+			               glideMs, movers, first, expected);
+			check (together && first == expected && movers >= 4, label);
+		}
+	}
+
+	{
+		// And the distances really were different - otherwise the test
+		// above proves nothing. Uuuu -> Eeee, in the units each ramp runs
+		// in.
+		double most = 0.0, least = 1e30;
+		for (int k = 0; k < kFormantCount; ++k)
+		{
+			const double df = std::fabs (kVowels[1].formants[k].freqHz
+			                           - kVowels[4].formants[k].freqHz);
+			const double dw = std::fabs (kVowels[1].formants[k].bandwidthHz
+			                           - kVowels[4].formants[k].bandwidthHz);
+			for (double d : { df, dw })
+				if (d > 0.0) { most = std::max (most, d); least = std::min (least, d); }
+		}
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "the movers really do differ: furthest %.0f, shortest %.0f (%.0f:1)",
+		               most, least, most / least);
+		check (most / least > 20.0, label);
+	}
+
+	{
+		// A glide of zero is FLOORED, not instant - a control that can
+		// produce a click will produce one. Prove the floor is doing
+		// something by requiring zero and the floor to behave identically
+		// and both to take real time.
+		Dsp a, b;
+		for (Dsp* d : { &a, &b })
+		{
+			d->setSampleRate (kRate);
+			applyPatch (*d, kVowels[4].formants);
+			d->reset ();
+		}
+		a.setGlideMs (0.0);
+		b.setGlideMs (kGlideFloorMs);
+		applyPatch (a, kVowels[1].formants);
+		applyPatch (b, kVowels[1].formants);
+
+		float in = 0.0f, oL = 0.0f, oR = 0.0f;
+		int stepsA = 0, stepsB = 0;
+		while (a.gliding () && stepsA < 100000) { a.process (&in,&in,&oL,&oR,1); ++stepsA; }
+		while (b.gliding () && stepsB < 100000) { b.process (&in,&in,&oL,&oR,1); ++stepsB; }
+
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "glide 0 ms is floored at %.0f ms (%d samples, not 1)",
+		               kGlideFloorMs, stepsA);
+		check (stepsA == stepsB && stepsA > 800, label);
+	}
+
+	{
+		// CLICKS, detected spectrally, with a negative control.
+		//
+		// The input is a pure 220 Hz sine, so a linear filter can only put
+		// energy at 220 Hz. Sweeping the filter spreads that into
+		// sidebands NEAR 220 Hz - but a discontinuity is broadband and
+		// puts energy at 8 kHz, where this patch has nothing of its own.
+		//
+		// The control is the same vowel change applied INSTANTLY by
+		// snapping the ramps. If the fastest legal glide is not far
+		// quieter up there than a snap, the coefficient update rate is too
+		// coarse and the guard has caught it.
+		auto artefactEnergy = [&] (bool snapInstead)
+		{
+			const int n = 8192, transition = 2048;
+			std::vector<float> in (n), outL (n), outR (n);
+			sine (in, 220.0, kRate);
+
+			Dsp dsp;
+			dsp.setSampleRate (kRate);
+			dsp.setGlideMs (kGlideFloorMs);
+			applyPatch (dsp, kVowels[4].formants);       // Uuuu
+			dsp.reset ();
+
+			// Settle, change vowel, then run through the transition.
+			dsp.process (in.data (), in.data (), outL.data (), outR.data (), transition);
+			applyPatch (dsp, kVowels[1].formants);       // Eeee
+			if (snapInstead)
+				dsp.snapParameters ();
+			dsp.process (in.data () + transition, in.data () + transition,
+			             outL.data () + transition, outR.data () + transition,
+			             n - transition);
+
+			// A HANN-WINDOWED SLIDING FRAME, and the maximum over frames.
+			//
+			// The first version of this measurement took one rectangular
+			// DTFT over the whole tail and reported the two cases as
+			// IDENTICAL - because a rectangular window on a 220 Hz sine
+			// leaks at every frequency, the leakage is the same in both
+			// runs, and it buried the thing being measured. A window kills
+			// the leakage; a sliding frame is what makes a click, whose
+			// energy is in one frame, stand out from a sweep, whose energy
+			// is spread over hundreds.
+			const int frame = 512, hop = 128;
+			double worst = 0.0;
+			std::vector<float> windowed (frame);
+			for (int start = transition - frame; start + frame <= n; start += hop)
+			{
+				if (start < 0)
+					continue;
+				for (int i = 0; i < frame; ++i)
+				{
+					const double w = 0.5 - 0.5 * std::cos (2.0 * M_PI * i / (frame - 1));
+					windowed[i] = static_cast<float> (outL[start + i] * w);
+				}
+				double e = 0.0;
+				for (double f : { 6000.0, 8000.0, 10000.0, 12000.0 })
+				{
+					const double m = responseAt (windowed, f, kRate);
+					e += m * m;
+				}
+				worst = std::max (worst, e);
+			}
+			return worst;
+		};
+
+		const double glided = artefactEnergy (false);
+		const double snapped = artefactEnergy (true);
+
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "fastest glide is %.0f dB quieter at 6-12 kHz than a snap",
+		               10.0 * std::log10 (snapped / std::max (glided, 1e-30)));
+		// 30 dB. Measured at 37 with the coefficient update at 8 samples
+		// and 24 at 16, so this threshold sits inside the knee and a
+		// regression to the old update rate fails here rather than merely
+		// sounding slightly worse. See kCoeffUpdateSamples.
+		check (glided * 1000.0 < snapped, label);
+	}
+
+	//--------------------------------------------------------------------
 	section ("9. Degenerate calls a host really does make");
 	//--------------------------------------------------------------------
 	{

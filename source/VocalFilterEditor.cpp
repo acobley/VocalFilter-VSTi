@@ -216,18 +216,23 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	}
 
 	//--------------------------------------------------------------------
-	// The bottom row: the two controls that are not part of a formant.
+	// The bottom row: the three controls that are not part of a formant.
 	// Dry / Wet sits under F1 because it is the one most likely to be
-	// touched while listening; the trim sits under F3, at the end of the
-	// signal path, which is where it is in the code.
+	// touched while listening; Glide sits in the middle, under the column
+	// whose F2 moves furthest between vowels and so shows the glide most;
+	// the trim sits under F3, at the end of the signal path, which is
+	// where it is in the code.
 	//--------------------------------------------------------------------
-	CRect mixRect = cell (0, 0);
-	mixRect.offset (0, kBottomRowTop - mixRect.top);
-	addSlider (kMix, "Dry / Wet", mixRect);
+	for (int column = 0; column < kColumns; ++column)
+	{
+		static const ParamID kBottom[kColumns] = { kMix, kGlide, kOutputTrim };
+		static const char* const kBottomLabels[kColumns] =
+			{ "Dry / Wet", "Glide", "Output Trim" };
 
-	CRect trimRect = cell (kColumns - 1, 0);
-	trimRect.offset (0, kBottomRowTop - trimRect.top);
-	addSlider (kOutputTrim, "Output Trim", trimRect);
+		CRect r = cell (column, 0);
+		r.offset (0, kBottomRowTop - r.top);
+		addSlider (kBottom[column], kBottomLabels[column], r);
+	}
 
 	frame->open (parent, platformType);
 	return true;

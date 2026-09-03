@@ -19,10 +19,11 @@ summed, mixed against the dry signal and trimmed.
 | Buses | **Stereo in, stereo out, and nothing else** | `setBusArrangements` refuses every other layout and `resource/au-info.plist` lists only `2/2` to match — auval is strict about the two agreeing |
 | Sample formats | 32- and 64-bit accepted | the line is float, as these plug-ins were; a 64-bit host is converted through `mScratchIn/Out` rather than refused |
 | Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
-| Parameters | eleven: 3 × (freq, width, level), dry/wet, output trim | section 2 |
+| Parameters | twelve: 3 × (freq, width, level), dry/wet, glide, output trim | section 2 |
 | Editor | **Yes** | the silent shell was validated first — guide step 6 — and the panel came afterwards |
 | Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand, plus `SpyPresetButton` | section 4 |
 | Vowel presets | five buttons — A E I O U — each writing the nine formant parameters and nothing else | section 2 |
+| Vowel transitions | a timed **linear ramp**, one length for all nine, so they arrive together | section 2b |
 
 ```
      in --+--> BP(F1, B1) * A1 --+
@@ -130,6 +131,7 @@ wrong control, and list order is a far smaller price than that.
  8  F3 Width      Hz    20 .. 400      default 120
  9  F3 Level      dB   -40 .. +12      default -12
 10  Dry / Wet      %     0 .. 100      default 100
+11  Glide         ms     0 .. 2000     default 150
 ```
 
 `kBypass` is 1000, far past the end of the table; everything that indexes
@@ -236,6 +238,94 @@ parameter's range does not fail loudly: `toNormalized` returns something
 outside 0..1, the host clamps it, and the button quietly recalls a different
 vowel from the one on its face. Eeee is the one that would go first — its F3
 is 3010 Hz, most of the way up the F3 range.
+
+### 2b. Glide — one length, nine parameters, one arrival
+
+`Glide` sets how long a formant takes to reach a new value. Press a vowel
+button with it at 500 ms and the tract slides there over half a second.
+
+**It is a linear ramp, not a one-pole**, and that is forced by the
+requirement. A one-pole is the right smoother for a control that should just
+stop tearing, but it has two properties that make "all parameters arrive at
+the same time" impossible to even state in it: it never actually *arrives*,
+only approaches; and its duration does not depend on how far it has to go.
+A ramp of N samples arrives exactly, at sample N, whatever the distance — so
+nine ramps started together and given the same N finish together. That is the
+whole mechanism. `Ramp` in `VocalFilterDsp.h`.
+
+Three details it needs to actually work:
+
+* **The length is taken once per `setFormant` call**, from `glideSamples()`,
+  so all nine of a vowel's parameters get the same N.
+* **A target that has not changed is ignored.** The processor pushes every
+  parameter every block; without that guard the ramp would restart 344 times
+  a second and never arrive.
+* **The last step assigns the target** rather than adding the increment
+  again. Over 2000 ms at 192 k that is 384000 additions of a number around
+  1e-5, and the accumulated error is exactly what would leave a formant a
+  hertz or two short of where the panel says it is.
+
+Measured, Uuuu → Eeee (F2 moves 1420 Hz while B2 moves 10 Hz — 142:1):
+
+```
+  glide    0 ms   all 5 movers arrive at sample   882   (want   882)
+  glide   50 ms   all 5 movers arrive at sample  2205   (want  2205)
+  glide  150 ms   all 5 movers arrive at sample  6615   (want  6615)
+  glide  500 ms   all 5 movers arrive at sample 22050   (want 22050)
+  glide 2000 ms   all 5 movers arrive at sample 88200   (want 88200)
+```
+
+**Five movers, not nine** — and that is the first thing this test caught. The
+levels are one shared profile so they never move on a vowel change, and Uuuu
+and Eeee happen to share a 50 Hz B1. A parameter already at its target is at
+its target on sample 1, which is correct and is not an arrival; the test
+counts only the ones that have to move.
+
+**Zero does not mean instant.** Every glide is floored at 20 ms, because F2
+jumping from 870 Hz to 2290 Hz between two samples is a click, and a control
+that can produce one will. The floor is what the line used to smooth
+everything with, so Glide at 0 is exactly the behaviour the plug-in had
+before the control existed.
+
+Dry/Wet and Output Trim are **not** glided — they keep the old 20 ms
+one-pole. They are not part of a vowel and nothing needs them to arrive in
+step with anything.
+
+Frequency ramps **linearly in hertz**, not in semitones: a formant is a
+resonance of a tube whose geometry is changing, and tract geometry maps to
+formant frequency far closer to linearly than logarithmically. A log glide is
+one line away if it ever sounds better.
+
+The first `setFormant` calls after construction **snap rather than glide**
+(`mSeeded`), or the plug-in would spend its first 150 ms sliding up from
+silence at 0 Hz every time it was instantiated.
+
+### The coefficient update rate is measured, not guessed
+
+Coefficients are recomputed every N samples because a biquad update is a sin
+and a cos. Sweeping N while measuring the artefact energy a fastest-legal
+glide puts at 6–12 kHz, against the same vowel change applied instantly:
+
+| N | below a snap |
+|---|---|
+| 1, 2, 4, 8 | **37 dB** |
+| 16 | 24 dB |
+| 32 | 24 dB |
+| 64 | 15 dB |
+
+There is a knee between 8 and 16. Everything finer than 8 buys nothing, and
+16 — which is what this was originally, chosen by reasoning rather than
+measurement — costs 13 dB. **N is now 8**, and the test asserts the 30 dB
+side of the knee, so a change back to 16 fails it rather than merely sounding
+slightly worse.
+
+That click measurement needed fixing twice before it said anything. The first
+version took one rectangular DTFT over the whole tail and reported the glided
+and snapped cases as **identical** — a rectangular window on a 220 Hz sine
+leaks at every frequency, the leakage was the same in both runs, and it
+buried the thing being measured. A Hann window kills the leakage; a sliding
+frame is what makes a click, whose energy is in one frame, stand out from a
+sweep, whose energy is spread over hundreds.
 
 ### DEVIATION 2 — the levels are one shared profile, and that is a decision
 
@@ -362,7 +452,7 @@ out of `VocalFilterDsp.h`, so the picture cannot drift from the code. If a
 constant becomes an expression the script cannot evaluate, it fails loudly
 rather than drawing a layout that is not the one that will ship.
 
-The panel is **348 × 229**. Run it after any layout change and look at the
+The panel is **348 × 229**, with Glide in the bottom row between Dry/Wet and Output Trim. Run it after any layout change and look at the
 result; arithmetic that says two controls do not overlap has been wrong before.
 
 ### The trap in `editorDestroyed`
@@ -420,7 +510,7 @@ c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-Twenty-eight assertions, all passing. The ones worth knowing about:
+Thirty-six assertions, all passing. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
@@ -434,6 +524,11 @@ Twenty-eight assertions, all passing. The ones worth knowing about:
   full-scale noise and requires the output to stay finite and bounded.
 * **§2b measures all five vowel presets** and checks no two are the same, that
   every one has F1 < F2 < F3, and that the level profile really is shared.
+* **§8b is the glide requirement itself**: at five glide settings, every
+  parameter that has to move arrives on the same sample, and that sample is
+  the one the control asked for. It also proves the distances really differ
+  (142:1), that a glide of 0 is floored rather than instant, and that the
+  fastest legal glide is 30 dB quieter at 6–12 kHz than a snap.
 
 Compare spectra, not samples, when a filter changes: four poles delay the
 signal even where their magnitude is flat, so two runs with identical spectra

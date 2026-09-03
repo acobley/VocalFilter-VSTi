@@ -51,6 +51,7 @@ enum Param : Steinberg::Vst::ParamID
 	kF3Freq, kF3Bandwidth, kF3Level,        // 7, 8, 9
 
 	kMix,                                   // 10  dry .. wet, %
+	kGlide,                                 // 11  vowel transition time, ms
 
 	kNumParams
 };

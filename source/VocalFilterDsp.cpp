@@ -183,15 +183,81 @@ void Dsp::reset ()
 }
 
 //------------------------------------------------------------------------
+int Dsp::glideSamples () const
+{
+	const double ms = std::max (mGlideMs, kGlideFloorMs);
+	const int n = static_cast<int> (ms * 0.001 * mSampleRate + 0.5);
+	return (n > 1) ? n : 1;
+}
+
+//------------------------------------------------------------------------
+void Dsp::setGlideMs (double milliseconds)
+{
+	mGlideMs = std::min (std::max (milliseconds, kGlideMinMs), kGlideMaxMs);
+}
+
+//------------------------------------------------------------------------
 void Dsp::setFormant (int index, double freqHz, double bandwidthHz, double levelDb)
 {
 	if (index < 0 || index >= kFormantCount)
 		return;
 
 	Formant& f = mFormant[index];
-	f.freqTarget = freqHz;
-	f.bwTarget   = bandwidthHz;
-	f.gainTarget = dbToLinear (levelDb, kLevelMinDb);
+	const double gain = dbToLinear (levelDb, kLevelMinDb);
+
+	// THE FIRST SETTINGS ARE NOT A GLIDE. Without this the plug-in would
+	// spend its first 150 ms sliding up from silence at 0 Hz to the
+	// factory patch, every time it was instantiated.
+	if (! mSeeded)
+	{
+		f.freq.snapTo (freqHz);
+		f.bw.snapTo (bandwidthHz);
+		f.gain.snapTo (gain);
+
+		// Seeded once the LAST formant has been given its first values,
+		// so all three are snapped before any of them can glide.
+		if (index == kFormantCount - 1)
+			mSeeded = true;
+		return;
+	}
+
+	// One length for all nine, taken once, so a vowel's three frequencies,
+	// three widths and three levels are given the same number of samples
+	// and therefore arrive on the same sample - however far each has to
+	// travel. That is the whole of "they arrive together"; the rest is
+	// making sure nothing restarts a ramp that is already running (see
+	// Ramp::setTarget) and nothing accumulates error on the way (see
+	// Ramp::tick).
+	const int samples = glideSamples ();
+
+	f.freq.setTarget (freqHz, samples);
+	f.bw.setTarget (bandwidthHz, samples);
+	f.gain.setTarget (gain, samples);
+}
+
+//------------------------------------------------------------------------
+bool Dsp::gliding () const
+{
+	for (const Formant& f : mFormant)
+		if (f.freq.moving () || f.bw.moving () || f.gain.moving ())
+			return true;
+	return false;
+}
+
+//------------------------------------------------------------------------
+double Dsp::formantFreq (int index) const
+{
+	return (index >= 0 && index < kFormantCount) ? mFormant[index].freq.value () : 0.0;
+}
+
+double Dsp::formantBandwidth (int index) const
+{
+	return (index >= 0 && index < kFormantCount) ? mFormant[index].bw.value () : 0.0;
+}
+
+double Dsp::formantGain (int index) const
+{
+	return (index >= 0 && index < kFormantCount) ? mFormant[index].gain.value () : 0.0;
 }
 
 //------------------------------------------------------------------------
@@ -211,9 +277,9 @@ void Dsp::snapParameters ()
 {
 	for (Formant& f : mFormant)
 	{
-		f.freq = f.freqTarget;
-		f.bw   = f.bwTarget;
-		f.gain = f.gainTarget;
+		f.freq.snap ();
+		f.bw.snap ();
+		f.gain.snap ();
 	}
 	mMix  = mMixTarget;
 	mTrim = mTrimTarget;
@@ -227,8 +293,8 @@ void Dsp::updateCoefficients ()
 {
 	for (Formant& f : mFormant)
 	{
-		f.filter[0].setBandpass (f.freq, f.bw, mSampleRate);
-		f.filter[1].setBandpass (f.freq, f.bw, mSampleRate);
+		f.filter[0].setBandpass (f.freq.value (), f.bw.value (), mSampleRate);
+		f.filter[1].setBandpass (f.freq.value (), f.bw.value (), mSampleRate);
 	}
 }
 
@@ -240,7 +306,7 @@ int Dsp::tailSamples () const
 	// since that is the one still ringing last.
 	double narrowest = kBandwidthMax;
 	for (const Formant& f : mFormant)
-		narrowest = std::min (narrowest, std::max (f.bw, 1.0));
+		narrowest = std::min (narrowest, std::max (f.bw.value (), 1.0));
 
 	const double seconds = 7.0 / (M_PI * narrowest);
 	return static_cast<int> (seconds * mSampleRate + 0.5);
@@ -260,14 +326,14 @@ void Dsp::process (const float* inLeft, const float* inRight,
 	for (int i = 0; i < frames; ++i)
 	{
 		//----------------------------------------------------------------
-		// Smooth every target one step. Frequency and bandwidth move the
-		// filter; gain, mix and trim move the arithmetic.
+		// Advance every glide one sample, and one-pole the two controls
+		// that are not part of a vowel.
 		//----------------------------------------------------------------
 		for (Formant& f : mFormant)
 		{
-			f.freq += (f.freqTarget - f.freq) * mSmoothCoeff;
-			f.bw   += (f.bwTarget   - f.bw)   * mSmoothCoeff;
-			f.gain += (f.gainTarget - f.gain) * mSmoothCoeff;
+			f.freq.tick ();
+			f.bw.tick ();
+			f.gain.tick ();
 		}
 		mMix  += (mMixTarget  - mMix)  * mSmoothCoeff;
 		mTrim += (mTrimTarget - mTrim) * mSmoothCoeff;
@@ -287,8 +353,9 @@ void Dsp::process (const float* inLeft, const float* inRight,
 		double wetL = 0.0, wetR = 0.0;
 		for (Formant& f : mFormant)
 		{
-			wetL += f.filter[0].process (dryL) * f.gain;
-			wetR += f.filter[1].process (dryR) * f.gain;
+			const double gain = f.gain.value ();
+			wetL += f.filter[0].process (dryL) * gain;
+			wetR += f.filter[1].process (dryR) * gain;
 		}
 
 		const double left  = dryL + (wetL - dryL) * mMix;

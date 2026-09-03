@@ -119,6 +119,24 @@ constexpr double kLevelMaxDb =  12.0;
 constexpr double kMixMin = 0.0;
 constexpr double kMixMax = 100.0;
 
+/** How long a formant takes to reach a new value, in milliseconds.
+ *
+ *  The default is 150 ms because that is roughly how long a real
+ *  articulator takes: diphthong glides in speech run about 100-200 ms, so
+ *  a vowel button at this setting moves the tract at about the rate a
+ *  mouth does.
+ *
+ *  ZERO DOES NOT MEAN INSTANT. Every glide is floored at kGlideFloorMs,
+ *  because F2 jumping from 870 Hz to 2290 Hz between two samples is a
+ *  click, and a control that can produce one is a control that will. The
+ *  floor is the 20 ms the line used to smooth everything with, so a glide
+ *  of 0 is exactly the behaviour this plug-in had before the control
+ *  existed. */
+constexpr double kGlideMinMs     =    0.0;
+constexpr double kGlideMaxMs     = 2000.0;
+constexpr double kGlideDefaultMs =  150.0;
+constexpr double kGlideFloorMs   =   20.0;
+
 //------------------------------------------------------------------------
 /** The factory patch: the vowel /a/ as in "father" - "Aaa".
  *
@@ -197,6 +215,72 @@ constexpr VowelPreset kVowels[kVowelCount] =
 constexpr double kMixDefault = 100.0;   // fully wet: the model, not a colour
 
 //------------------------------------------------------------------------
+/** A LINEAR ramp of fixed duration - the thing a glide is made of.
+ *
+ *  Not a one-pole. A one-pole is the right smoother for a control that
+ *  should just stop tearing, but it is the wrong thing here for two
+ *  reasons: it never actually ARRIVES, only approaches; and its duration
+ *  does not depend on how far it has to go, so "all parameters arrive at
+ *  the same time" cannot even be stated in it. A ramp of N samples arrives
+ *  exactly, at sample N, whatever the distance - so nine of them started
+ *  together and given the same N finish together, which is the whole
+ *  requirement.
+ *
+ *  The last step ASSIGNS the target rather than adding the increment
+ *  again: over 2000 ms at 192 k that is 384000 additions of a number
+ *  around 1e-5, and the accumulated error is what would leave a formant
+ *  a hertz or two short of where the panel says it is. */
+class Ramp
+{
+public:
+	/** Aim somewhere new over `samples`. A target that has not changed is
+	    IGNORED - the processor pushes every parameter every block, and
+	    restarting the ramp each time would mean it never arrived. */
+	void setTarget (double target, int samples)
+	{
+		if (target == mTarget)
+			return;
+
+		mTarget = target;
+		mRemaining = (samples > 1) ? samples : 1;
+		mIncrement = (mTarget - mValue) / static_cast<double> (mRemaining);
+	}
+
+	/** Set both ends at once, for construction and for a state load. */
+	void snapTo (double value)
+	{
+		mValue = mTarget = value;
+		mIncrement = 0.0;
+		mRemaining = 0;
+	}
+
+	/** Finish immediately wherever we are aimed. */
+	void snap () { snapTo (mTarget); }
+
+	inline double tick ()
+	{
+		if (mRemaining > 0)
+		{
+			if (--mRemaining == 0)
+				mValue = mTarget;          // exact arrival, not 384000 additions
+			else
+				mValue += mIncrement;
+		}
+		return mValue;
+	}
+
+	double value () const { return mValue; }
+	double target () const { return mTarget; }
+	bool moving () const { return mRemaining > 0; }
+
+private:
+	double mValue = 0.0;
+	double mTarget = 0.0;
+	double mIncrement = 0.0;
+	int    mRemaining = 0;
+};
+
+//------------------------------------------------------------------------
 /** A bandpass biquad, RBJ cookbook, CONSTANT 0 dB PEAK GAIN form - so a
     formant's level is its level and not something the bandwidth also has
     a say in. Transposed direct form II. */
@@ -257,6 +341,25 @@ public:
 	void setMixPercent (double percent);
 	void setTrimNormalized (double normalized);
 
+	/** How long a formant takes to reach a new value. Applies to the NEXT
+	    move, not to one already under way. */
+	void setGlideMs (double milliseconds);
+
+	/** True while any formant is still on its way somewhere - the test
+	    suite uses it to measure that they all stop on the same sample. */
+	bool gliding () const;
+
+	//--------------------------------------------------------------------
+	// Where the formants are RIGHT NOW, part way through a glide, as
+	// opposed to where the parameters say they are going. The test suite
+	// reads these to prove the nine arrive together; a response curve on
+	// the panel would want them too, so that what is drawn during a glide
+	// is what is being heard.
+	//--------------------------------------------------------------------
+	double formantFreq (int index) const;
+	double formantBandwidth (int index) const;
+	double formantGain (int index) const;      // LINEAR
+
 	/** Snap every smoother to its target, for a state load or an activate
 	    where a 20 ms ramp from the old value would be wrong. */
 	void snapParameters ();
@@ -280,23 +383,51 @@ private:
 	double mSampleRate = 44100.0;
 	double mSmoothCoeff = 0.0;
 
+	/** Samples in a glide, from the current glide time and sample rate,
+	    floored at kGlideFloorMs. */
+	int glideSamples () const;
+
 	struct Formant
 	{
-		double freqTarget = 1000.0, bwTarget = 100.0, gainTarget = 1.0;
-		double freq       = 1000.0, bw       = 100.0, gain       = 1.0;
+		// Frequency ramps LINEARLY IN HERTZ, not in semitones. A formant
+		// is a resonance of a tube whose geometry is changing, and tract
+		// geometry maps to formant frequency far closer to linearly than
+		// logarithmically - so this is the shape an articulator actually
+		// makes. A log glide is one line away if it ever sounds better.
+		Ramp freq;
+		Ramp bw;
+		Ramp gain;                        // LINEAR gain, not dB
 		Biquad filter[2];                 // shared coefficients, per-channel state
 	};
 
 	Formant mFormant[kFormantCount];
 
+	// Dry/Wet and Output Trim are NOT part of a vowel, so they keep the
+	// old 20 ms one-pole: they should stop tearing, and nothing needs them
+	// to arrive in step with anything.
 	double mMixTarget = 1.0, mMix = 1.0;      // 0 dry .. 1 wet
 	double mTrimTarget = 1.0, mTrim = 1.0;    // linear
 
+	double mGlideMs = kGlideDefaultMs;
+	bool   mSeeded = false;                   // first setFormant snaps rather than glides
+
 	/** Coefficients are recomputed every this many samples rather than
-	    every sample: a biquad update is a sin and a cos, and with the
-	    parameters themselves smoothed over 20 ms the difference across
-	    sixteen samples is far below anything audible. */
-	static constexpr int kCoeffUpdateSamples = 16;
+	    every sample, because a biquad update is a sin and a cos.
+	 *
+	 *  EIGHT IS MEASURED, NOT GUESSED. Sweeping this while measuring the
+	 *  artefact energy a fastest-legal glide puts at 6-12 kHz, against the
+	 *  same vowel change applied instantly:
+	 *
+	 *      1, 2, 4, 8 samples  ->  37 dB below a snap
+	 *            16 samples    ->  24 dB
+	 *            32 samples    ->  24 dB
+	 *            64 samples    ->  15 dB
+	 *
+	 *  There is a knee between 8 and 16: everything finer than 8 buys
+	 *  nothing, and 16 - which is what this was originally - costs 13 dB.
+	 *  The test in section 8b asserts the 30 dB side of that knee, so a
+	 *  change back to 16 fails it. */
+	static constexpr int kCoeffUpdateSamples = 8;
 	int mCoeffCountdown = 0;
 };
 

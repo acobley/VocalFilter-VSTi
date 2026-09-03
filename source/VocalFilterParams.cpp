@@ -38,6 +38,7 @@ const ParamDef kParams[kNumParams] =
 	{ kF3Level,                     "F3  Level",    "dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[2].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    true },
 
 	{ kMix,                         "Dry / Wet",    "%",  ParamType::Float, kMixMin,             kMixMax,             kMixDefault,                    kMixMin,             kMixMax,             0,    true },
+	{ kGlide,                       "Glide",        "ms", ParamType::Float, kGlideMinMs,         kGlideMaxMs,         kGlideDefaultMs,                kGlideMinMs,         kGlideMaxMs,         0,    false },
 };
 
 //------------------------------------------------------------------------
@@ -46,7 +47,7 @@ const ParamDef kParams[kNumParams] =
 // wrong place is exactly the kind of mistake that presents as "the width
 // slider moves the level".
 //------------------------------------------------------------------------
-static_assert (kNumParams == 11, "eleven parameters: trim, 3 x 3 formant, mix");
+static_assert (kNumParams == 12, "twelve parameters: trim, 3 x 3 formant, mix, glide");
 static_assert (formantParam (0, kFieldFreq)      == kF1Freq,      "F1 freq id");
 static_assert (formantParam (0, kFieldBandwidth) == kF1Bandwidth, "F1 width id");
 static_assert (formantParam (0, kFieldLevel)     == kF1Level,     "F1 level id");

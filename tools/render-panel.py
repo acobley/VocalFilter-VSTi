@@ -137,12 +137,13 @@ for c in range(3):
         slider(x0, y0, x1, y1, lab, AAA[c][r], (0.55, 0.2, 0.7)[r])
 
 # bottom row
-x0, _, x1, _ = cell(0, 0)
-slider(x0, env['kBottomRowTop'], x1,
-       env['kBottomRowTop'] + env['kSliderHeight'], 'Dry / Wet', '100.0 %', 1.0)
-x0, _, x1, _ = cell(2, 0)
-slider(x0, env['kBottomRowTop'], x1,
-       env['kBottomRowTop'] + env['kSliderHeight'], 'Output Trim', '0.0 dB', 1.0)
+BOTTOM = (('Dry / Wet', '100.0 %', 1.0),
+          ('Glide', '150.0 ms', 0.075),
+          ('Output Trim', '0.0 dB', 1.0))
+for c, (lab, val, frac) in enumerate(BOTTOM):
+    x0, _, x1, _ = cell(c, 0)
+    slider(x0, env['kBottomRowTop'], x1,
+           env['kBottomRowTop'] + env['kSliderHeight'], lab, val, frac)
 
 out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, '..', 'docs', 'panel.png')
 os.makedirs(os.path.dirname(out), exist_ok=True)
