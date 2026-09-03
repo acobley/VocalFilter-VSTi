@@ -24,6 +24,8 @@
 
 #include "vstgui/vstgui.h"
 
+#include <functional>
+
 namespace VocalFilter {
 
 //------------------------------------------------------------------------
@@ -58,8 +60,15 @@ private:
 	VSTGUI::CCoord yOf (double db, const VSTGUI::CRect& plot) const;
 
 	void drawGrid (VSTGUI::CDrawContext* context, const VSTGUI::CRect& plot);
-	void drawCurve (VSTGUI::CDrawContext* context, const VSTGUI::CRect& plot,
-	                const FormantSetting& formant, const VSTGUI::CColor& colour);
+
+	/** One broken polyline across the plot. `sampler` returns decibels for
+	    a frequency; anything below the floor breaks the line rather than
+	    being clamped to it. Both the three formants and the summed
+	    response go through here, so they cannot end up drawn by two
+	    slightly different pieces of code. */
+	void drawPolyline (VSTGUI::CDrawContext* context, const VSTGUI::CRect& plot,
+	                   const std::function<double (double)>& sampler,
+	                   const VSTGUI::CColor& colour, VSTGUI::CCoord width);
 
 	FormantSetting mFormants[kFormantCount] = {};
 	double mSampleRate = 44100.0;

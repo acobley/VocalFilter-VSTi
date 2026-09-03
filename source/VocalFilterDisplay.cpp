@@ -25,6 +25,17 @@ const CColor kTrace[kFormantCount] =
 	CColor ( 96, 160, 255, 255),    // F3 blue
 };
 
+/** The summed response - what the three actually add up to, and what is
+    heard. White, drawn last and heaviest, because it is the answer and the
+    three colours are its components.
+
+    NOT fully opaque. Where the sum sits on top of a component - and below
+    F1 it sits almost exactly on it - a solid white line hides the colour
+    completely, so "F1 yellow" stops being true wherever it matters most.
+    At 205 the trace underneath tints it, which turns the collision into
+    information: white-over-yellow means F1 IS the response there. */
+const CColor kSumTrace (255, 255, 255, 205);
+
 const CColor kPlate      (  0,   0,   0, 190);
 const CColor kPlateEdge  (255, 255, 255, 110);
 const CColor kGridLine   (255, 255, 255,  38);
@@ -115,18 +126,12 @@ void SpyResponseDisplay::drawGrid (CDrawContext* context, const CRect& plot)
 }
 
 //------------------------------------------------------------------------
-void SpyResponseDisplay::drawCurve (CDrawContext* context, const CRect& plot,
-                                    const FormantSetting& formant, const CColor& colour)
+void SpyResponseDisplay::drawPolyline (CDrawContext* context, const CRect& plot,
+                                       const std::function<double (double)>& sampler,
+                                       const CColor& colour, CCoord width)
 {
-	const double gain = dbToLinear (formant.levelDb, kLevelMinDb);
-
-	// A silenced formant draws nothing rather than a flat line along the
-	// bottom, which would read as a filter doing something quiet.
-	if (gain <= 0.0)
-		return;
-
 	context->setFrameColor (colour);
-	context->setLineWidth (1.5);
+	context->setLineWidth (width);
 
 	SharedPointer<CGraphicsPath> path = owned (context->createGraphicsPath ());
 	if (path == nullptr)
@@ -142,11 +147,7 @@ void SpyResponseDisplay::drawCurve (CDrawContext* context, const CRect& plot,
 	{
 		const double t = i / static_cast<double> (kPoints - 1);
 		const double hz = kMinHz * std::pow (kMaxHz / kMinHz, t);
-
-		// THE SHARED FUNCTION. Not a copy of the response maths.
-		const double mag = bandpassMagnitude (formant.freqHz, formant.bandwidthHz,
-		                                      hz, mSampleRate) * gain;
-		const double decibels = 20.0 * std::log10 (std::max (mag, 1e-9));
+		const double decibels = sampler (hz);
 
 		if (decibels < kMinDb)
 		{
@@ -201,22 +202,70 @@ void SpyResponseDisplay::draw (CDrawContext* context)
 	caption.bottom = caption.top + 11.;
 	context->drawString ("Filter response", caption, kLeftText, true);
 
-	// The legend doubles as the axis labels' colour key - F1 F2 F3 in the
-	// colours their curves are drawn in, so nothing has to be looked up.
-	CCoord x = caption.right - 66.;
-	for (int k = 0; k < kFormantCount; ++k)
+	// The legend is the colour key - each name in the colour its curve is
+	// drawn in, so nothing has to be looked up. Laid out from the RIGHT
+	// EDGE backwards, because adding "Sum" to a row measured from the left
+	// would have pushed it off the plate.
 	{
-		char name[8];
-		std::snprintf (name, sizeof (name), "F%d", k + 1);
-		context->setFontColor (kTrace[k]);
-		CRect slot (x, caption.top, x + 20., caption.bottom);
-		context->drawString (name, slot, kLeftText, true);
-		x += 22.;
+		struct { const char* name; CColor colour; CCoord width; } entries[] =
+		{
+			{ "F1",  kTrace[0],  22. },
+			{ "F2",  kTrace[1],  22. },
+			{ "F3",  kTrace[2],  22. },
+			{ "Sum", kSumTrace,  28. },
+		};
+
+		CCoord total = 0.;
+		for (const auto& e : entries)
+			total += e.width;
+
+		CCoord x = caption.right - total;
+		for (const auto& e : entries)
+		{
+			context->setFontColor (e.colour);
+			CRect slot (x, caption.top, x + e.width, caption.bottom);
+			context->drawString (e.name, slot, kLeftText, true);
+			x += e.width;
+		}
 	}
 
 	// Painted in order, so F1 is under F2 is under F3 where they cross.
 	for (int k = 0; k < kFormantCount; ++k)
-		drawCurve (context, plot, mFormants[k], kTrace[k]);
+	{
+		const FormantSetting& f = mFormants[k];
+		const double gain = dbToLinear (f.levelDb, kLevelMinDb);
+
+		// A silenced formant draws nothing rather than a flat line along
+		// the bottom, which would read as a filter doing something quiet.
+		if (gain <= 0.0)
+			continue;
+
+		drawPolyline (context, plot,
+			[this, &f, gain] (double hz)
+			{
+				// THE SHARED FUNCTION. Not a copy of the response maths.
+				const double mag = bandpassMagnitude (f.freqHz, f.bandwidthHz,
+				                                      hz, mSampleRate) * gain;
+				return 20.0 * std::log10 (std::max (mag, 1e-9));
+			},
+			kTrace[k], 1.5);
+	}
+
+	// THE SUM, last and heaviest, so it reads as the resultant rather than
+	// as a fourth formant. bankMagnitude does the COMPLEX sum, levels and
+	// polarity included - the same function tests/DspTests.cpp section 3
+	// checks against the running filter, so this white line is what is
+	// actually coming out of the bank and not an approximation of it.
+	//
+	// Dry/Wet and Output Trim are deliberately NOT in it: this panel is
+	// captioned "Filter response" and shows the filter, not the mix.
+	drawPolyline (context, plot,
+		[this] (double hz)
+		{
+			const double mag = bankMagnitude (mFormants, kFormantCount, hz, mSampleRate);
+			return 20.0 * std::log10 (std::max (mag, 1e-9));
+		},
+		kSumTrace, 2.0);
 
 	setDirty (false);
 }

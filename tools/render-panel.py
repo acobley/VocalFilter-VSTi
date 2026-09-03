@@ -15,6 +15,7 @@ what this draws if the argument is left off) or 1..5 to show one of the
 vowel buttons lit, as it is when the Vowel parameter is on a preset.
 """
 
+import cmath
 import math
 import os
 import re
@@ -160,6 +161,18 @@ MIN_HZ, MAX_HZ, MAX_DB, MIN_DB = 80.0, 8000.0, 12.0, -48.0
 FS = 44100.0
 
 
+def bandpass_complex(f0, bw, hz):
+    """H(e^jw) for one formant's bandpass, complex."""
+    q = min(max(f0 / max(bw, 1.0), 0.3), 60.0)
+    w0 = 2 * math.pi * f0 / FS
+    alpha = math.sin(w0) / (2 * q)
+    a0 = 1 + alpha
+    b0, b2 = alpha / a0, -alpha / a0
+    a1, a2 = (-2 * math.cos(w0)) / a0, (1 - alpha) / a0
+    z = cmath.exp(-2j * math.pi * hz / FS)
+    return (b0 + b2 * z * z) / (1 + a1 * z + a2 * z * z)
+
+
 def bandpass_db(f0, bw, hz, gain_db):
     q = min(max(f0 / max(bw, 1.0), 0.3), 60.0)
     w0 = 2 * math.pi * f0 / FS
@@ -201,30 +214,57 @@ for v in (0, -12, -24, -36):
     g = 90 if v == 0 else 60
     d.line([px0 * SCALE, y_of(v) * SCALE, px1 * SCALE, y_of(v) * SCALE], fill=(g, g, g))
 
+SUM_TRACE = (255, 255, 255)
 cap = (dl + 5, dt + 4)
 d.text((cap[0] * SCALE, cap[1] * SCALE), "Filter response", fill=(200, 200, 200), font=F7)
-lx = dr - 5 - 66
-for k in range(3):
-    d.text((lx * SCALE, cap[1] * SCALE), f"F{k+1}", fill=TRACE[k], font=F7)
-    lx += 22
+LEGEND = (("F1", TRACE[0], 22), ("F2", TRACE[1], 22),
+          ("F3", TRACE[2], 22), ("Sum", SUM_TRACE, 28))
+lx = dr - 5 - sum(w for _, _, w in LEGEND)
+for name, colour, w in LEGEND:
+    d.text((lx * SCALE, cap[1] * SCALE), name, fill=colour, font=F7)
+    lx += w
 
 FORMANTS = ((730, 80, 0.0), (1090, 90, -3.3), (2440, 120, -26.8))
-for k, (f0, bw, lvl) in enumerate(FORMANTS):
-    # Broken where it falls off the bottom, as the plug-in draws it: clamping
-    # to the floor draws a flat line across the whole width instead.
+POLARITY = (1.0, -1.0, 1.0)
+
+
+def broken_line(sampler, colour, width):
     run = []
     for i in range(240):
         t = i / 239.0
         hz = MIN_HZ * (MAX_HZ / MIN_HZ) ** t
-        v = bandpass_db(f0, bw, hz, lvl)
+        v = sampler(hz)
         if v < MIN_DB:
             if len(run) > 1:
-                d.line(run, fill=TRACE[k], width=SCALE)
+                d.line(run, fill=colour, width=width)
             run = []
             continue
         run.append((x_of(hz) * SCALE, y_of(v) * SCALE))
     if len(run) > 1:
-        d.line(run, fill=TRACE[k], width=SCALE)
+        d.line(run, fill=colour, width=width)
+
+
+for k, (f0, bw, lvl) in enumerate(FORMANTS):
+    # Broken where it falls off the bottom, as the plug-in draws it: clamping
+    # to the floor draws a flat line across the whole width instead.
+    broken_line(lambda hz, f0=f0, bw=bw, lvl=lvl: bandpass_db(f0, bw, hz, lvl),
+                TRACE[k], SCALE)
+
+
+# The sum, last and heaviest. COMPLEX sum with the polarity, exactly as
+# bankMagnitude does it - adding the magnitudes would put the valley between
+# F1 and F2 in the wrong place and make it far too shallow.
+def sum_db(hz):
+    total = 0j
+    for (f0, bw, lvl), sign in zip(FORMANTS, POLARITY):
+        total += sign * (10 ** (lvl / 20.0)) * bandpass_complex(f0, bw, hz)
+    return 20 * math.log10(max(abs(total), 1e-9))
+
+
+# Solid here; the plug-in draws it at alpha 205 so a component underneath
+# tints it. PIL would need manual blending for that and the mock exists to
+# check the LAYOUT, not the blend.
+broken_line(sum_db, SUM_TRACE, 2 * SCALE)
 
 # bottom row
 BOTTOM = (('Dry / Wet', '100.0 %', 1.0),

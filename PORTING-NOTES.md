@@ -628,6 +628,20 @@ overlaid curves on a **log frequency axis** with a decibel grid, rather than
 one polyline over an index. F1 yellow, F2 green, F3 blue, with a legend in
 those colours in the top-right so nothing has to be looked up.
 
+A fourth curve, **white and heaviest, is the summed response** — what the
+three actually add up to and what is heard. It comes from `bankMagnitude()`,
+which does the complex sum with the levels and the polarity, and which
+`tests/DspTests.cpp` §3 checks against the running filter — so the white line
+is what is coming out of the bank rather than an approximation of it. Dry/Wet
+and Output Trim are deliberately not in it: the panel is captioned *Filter
+response* and shows the filter, not the mix.
+
+It is drawn at **alpha 205, not solid**. Where the sum sits on top of a
+component — and below F1 it sits almost exactly on it — a solid white line
+hides the colour completely and "F1 yellow" stops being true where it matters
+most. Letting the trace underneath tint it turns the collision into
+information: white over yellow means F1 *is* the response there.
+
 The axis is 80 Hz – 8 kHz and +12 to −48 dB, fixed rather than auto-scaling,
 so two vowels can be compared. Log frequency because a linear axis spends two
 thirds of its width above 3 kHz, where nothing in this plug-in lives, and
@@ -639,6 +653,9 @@ coefficients come from. That is the guide's shared-function rule, and it is
 the whole reason the display can be trusted: a private copy of the response
 maths here would agree with the filter today and diverge at some sample rate
 nobody tests.
+
+All four go through one `drawPolyline`, so they cannot end up drawn by two
+slightly different pieces of code.
 
 **A curve is broken where it falls off the bottom of the scale**, not clamped
 to it. Clamping draws a flat line along the floor, which reads as a filter
