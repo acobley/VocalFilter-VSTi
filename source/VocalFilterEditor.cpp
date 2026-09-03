@@ -5,6 +5,8 @@
 #include "VocalFilterEditor.h"
 #include "VocalFilterController.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <string>
 
@@ -44,8 +46,61 @@ VocalFilterEditor::VocalFilterEditor (VocalFilterController* controller)
 CRect VocalFilterEditor::cell (int column, int row) const
 {
 	const CCoord x = kMargin + column * (kSliderWidth + kColumnGap);
-	const CCoord y = kMargin + kHeaderHeight + row * (kSliderHeight + kRowGap);
+	const CCoord y = kGridTop + row * (kSliderHeight + kRowGap);
 	return CRect (x, y, x + kSliderWidth, y + kSliderHeight);
+}
+
+//------------------------------------------------------------------------
+CRect VocalFilterEditor::vowelCell (int index) const
+{
+	// Five buttons across exactly the width three sliders occupy, so the
+	// row lines up with the grid at both ends whatever the slider width
+	// is. Kept in floating point and rounded only at the edges, or the
+	// accumulated truncation leaves the last button short.
+	const double width = (kContentWidth - (kVowelCount - 1) * kVowelGap)
+	                   / static_cast<double> (kVowelCount);
+	const double left  = kMargin + index * (width + kVowelGap);
+	return CRect (std::round (left), kVowelTop,
+	              std::round (left + width), kVowelTop + kVowelHeight);
+}
+
+//------------------------------------------------------------------------
+void VocalFilterEditor::setParameter (ParamID tag, double plain)
+{
+	if (mController == nullptr)
+		return;
+
+	const ParamDef& def = paramDef (tag);
+	const double normalized = std::min (1.0, std::max (0.0, def.toNormalized (plain)));
+
+	// A complete gesture. beginEdit / endEdit around it is what makes a
+	// host treat nine writes as something it can record and undo, rather
+	// than as nine unexplained jumps; setParamNormalized is what moves
+	// this panel's own slider, because it comes back through
+	// updateControl.
+	mController->beginEdit (tag);
+	mController->setParamNormalized (tag, normalized);
+	mController->performEdit (tag, normalized);
+	mController->endEdit (tag);
+}
+
+//------------------------------------------------------------------------
+void VocalFilterEditor::applyVowel (int index)
+{
+	if (index < 0 || index >= kVowelCount)
+		return;
+
+	const VowelPreset& vowel = kVowels[index];
+
+	for (int k = 0; k < kFormantCount; ++k)
+	{
+		setParameter (formantParam (k, kFieldFreq),      vowel.formants[k].freqHz);
+		setParameter (formantParam (k, kFieldBandwidth), vowel.formants[k].bandwidthHz);
+		setParameter (formantParam (k, kFieldLevel),     vowel.formants[k].levelDb);
+	}
+
+	// Dry / Wet and Output Trim are deliberately NOT touched. They are how
+	// the plug-in is set up in a mix; the vowel is what it is saying.
 }
 
 //------------------------------------------------------------------------
@@ -106,16 +161,36 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	frame->setBackgroundColor (kPanel);
 
 	//--------------------------------------------------------------------
-	// The title, and the three column headings above the grid.
+	// The title.
 	//--------------------------------------------------------------------
 	addHeading ("Vocal Tract  -  three parallel formants",
-	            CRect (kMargin, 2, kEditorWidth - kMargin, 2 + 16));
+	            CRect (kMargin, kTitleTop, kEditorWidth - kMargin,
+	                   kTitleTop + kTitleHeight));
 
+	//--------------------------------------------------------------------
+	// The five vowel buttons. Each one writes the nine formant parameters
+	// and nothing else - see applyVowel.
+	//
+	// The handler captures `this` and an INDEX, not a pointer into
+	// kVowels: the button outlives nothing here, but an index cannot be
+	// left dangling by a later refactor that makes the table dynamic.
+	//--------------------------------------------------------------------
+	for (int v = 0; v < kVowelCount; ++v)
+	{
+		auto* button = new SpyPresetButton (vowelCell (v), kVowels[v].name);
+		button->setHandler ([this, v] { applyVowel (v); });
+		frame->addView (button);
+	}
+
+	//--------------------------------------------------------------------
+	// The three column headings above the grid.
+	//--------------------------------------------------------------------
 	for (int column = 0; column < kColumns; ++column)
 	{
 		const CRect head = cell (column, 0);
 		addHeading (kColumnNames[column],
-		            CRect (head.left, kMargin + 6, head.right, kMargin + 6 + 14));
+		            CRect (head.left, kHeadingTop, head.right,
+		                   kHeadingTop + kHeadingHeight));
 	}
 
 	//--------------------------------------------------------------------
@@ -146,16 +221,12 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	// touched while listening; the trim sits under F3, at the end of the
 	// signal path, which is where it is in the code.
 	//--------------------------------------------------------------------
-	const CCoord bottom = kMargin + kHeaderHeight
-	                    + kRows * (kSliderHeight + kRowGap) - kRowGap
-	                    + kSectionGap;
-
 	CRect mixRect = cell (0, 0);
-	mixRect.offset (0, bottom - mixRect.top);
+	mixRect.offset (0, kBottomRowTop - mixRect.top);
 	addSlider (kMix, "Dry / Wet", mixRect);
 
 	CRect trimRect = cell (kColumns - 1, 0);
-	trimRect.offset (0, bottom - trimRect.top);
+	trimRect.offset (0, kBottomRowTop - trimRect.top);
 	addSlider (kOutputTrim, "Output Trim", trimRect);
 
 	frame->open (parent, platformType);

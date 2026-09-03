@@ -55,6 +55,45 @@ static_assert (formantParam (2, kFieldFreq)      == kF3Freq,      "F3 freq id");
 static_assert (formantParam (2, kFieldLevel)     == kF3Level,     "F3 level id");
 
 //------------------------------------------------------------------------
+// And prove, also at compile time, that EVERY VOWEL BUTTON IS REACHABLE
+// BY ITS SLIDERS.
+//
+// A preset that asks for a value outside a parameter's range does not
+// fail loudly - toNormalized returns something outside 0..1, the host
+// clamps it, and the button quietly recalls a different vowel from the
+// one on its face. Eeee is the one that would go first: its F3 is
+// 3010 Hz, over the top of the F2 range and most of the way up the F3
+// range, so narrowing either range breaks it.
+//------------------------------------------------------------------------
+namespace {
+
+constexpr bool within (double v, double lo, double hi) { return v >= lo && v <= hi; }
+
+constexpr bool vowelIsReachable (int vowel)
+{
+	for (int k = 0; k < kFormantCount; ++k)
+	{
+		const FormantSetting& f = kVowels[vowel].formants[k];
+		if (! within (f.freqHz,      kFormantFreqMin[k], kFormantFreqMax[k]) ||
+		    ! within (f.bandwidthHz, kBandwidthMin,      kBandwidthMax)      ||
+		    ! within (f.levelDb,     kLevelMinDb,        kLevelMaxDb))
+			return false;
+	}
+	// And the formants must be in order, or it is not a vowel.
+	return kVowels[vowel].formants[0].freqHz < kVowels[vowel].formants[1].freqHz
+	    && kVowels[vowel].formants[1].freqHz < kVowels[vowel].formants[2].freqHz;
+}
+
+} // namespace
+
+static_assert (kVowelCount == 5, "five buttons: A E I O U");
+static_assert (vowelIsReachable (0), "Aaaa is outside its sliders' ranges");
+static_assert (vowelIsReachable (1), "Eeee is outside its sliders' ranges");
+static_assert (vowelIsReachable (2), "Iiii is outside its sliders' ranges");
+static_assert (vowelIsReachable (3), "Oooo is outside its sliders' ranges");
+static_assert (vowelIsReachable (4), "Uuuu is outside its sliders' ranges");
+
+//------------------------------------------------------------------------
 const ParamDef& paramDef (Steinberg::Vst::ParamID id)
 {
 	if (id < kNumParams)

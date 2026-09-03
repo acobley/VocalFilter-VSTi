@@ -46,29 +46,61 @@ public:
 	void updateControl (Steinberg::Vst::ParamID tag, Steinberg::Vst::ParamValue normalized);
 
 	//--------------------------------------------------------------------
-	// The grid. Every position on the panel is one of these times a row
-	// or a column index, so the layout has no magic numbers in it.
+	// The layout. Every position on the panel is derived from these, so
+	// there are no magic numbers below and resizing means editing here.
+	//
+	// Reading order down the panel is: what the panel is, then PICK A
+	// VOWEL, then adjust it, then the two controls that are not part of a
+	// vowel. The buttons go above the grid because that is the order the
+	// panel is used in.
 	//--------------------------------------------------------------------
-	static constexpr int kMargin      = 14;
-	static constexpr int kSliderWidth = 96;
-	static constexpr int kSliderHeight= 27;
-	static constexpr int kColumnGap   = 16;
-	static constexpr int kRowGap      = 6;
-	static constexpr int kHeaderHeight= 26;
-	static constexpr int kSectionGap  = 18;
+	static constexpr int kMargin       = 14;
+	static constexpr int kSliderWidth  = 96;
+	static constexpr int kSliderHeight = 27;
+	static constexpr int kColumnGap    = 16;
+	static constexpr int kRowGap       = 6;
 
 	static constexpr int kColumns = kFormantCount;   // F1 F2 F3
 	static constexpr int kRows    = 3;               // Freq, Width, Level
 
-	static constexpr int kEditorWidth =
-		kMargin * 2 + kColumns * kSliderWidth + (kColumns - 1) * kColumnGap;
-	static constexpr int kEditorHeight =
-		kMargin + kHeaderHeight
-		+ kRows * kSliderHeight + (kRows - 1) * kRowGap
-		+ kSectionGap + kSliderHeight + kMargin + 16;
+	static constexpr int kContentWidth =
+		kColumns * kSliderWidth + (kColumns - 1) * kColumnGap;
+
+	static constexpr int kTitleTop    = 4;
+	static constexpr int kTitleHeight = 15;
+
+	static constexpr int kVowelTop    = kTitleTop + kTitleHeight + 7;
+	static constexpr int kVowelHeight = 23;
+	static constexpr int kVowelGap    = 8;
+
+	static constexpr int kHeadingTop    = kVowelTop + kVowelHeight + 11;
+	static constexpr int kHeadingHeight = 14;
+
+	static constexpr int kGridTop    = kHeadingTop + kHeadingHeight + 3;
+	static constexpr int kSectionGap = 18;
+
+	static constexpr int kBottomRowTop =
+		kGridTop + kRows * (kSliderHeight + kRowGap) - kRowGap + kSectionGap;
+
+	static constexpr int kEditorWidth  = kMargin * 2 + kContentWidth;
+	static constexpr int kEditorHeight = kBottomRowTop + kSliderHeight + kMargin;
 
 private:
 	VSTGUI::CRect cell (int column, int row) const;
+
+	/** The five vowel buttons share the grid's width, so a row of five
+	    lines up with a row of three without either being told about the
+	    other. */
+	VSTGUI::CRect vowelCell (int index) const;
+
+	/** Write one parameter as a complete edit gesture - begin, set,
+	    perform, end - so the host records it, undo works, and every open
+	    editor's slider follows. */
+	void setParameter (Steinberg::Vst::ParamID tag, double plainValue);
+
+	/** Recall one vowel: the nine formant parameters, and nothing else.
+	    Dry/Wet and Output Trim are the user's, not the vowel's. */
+	void applyVowel (int index);
 
 	/** A slider bound to a parameter, labelled, and formatting its own
 	    readout from the SAME table the host reads. */

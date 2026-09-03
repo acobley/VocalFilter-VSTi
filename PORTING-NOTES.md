@@ -21,7 +21,8 @@ summed, mixed against the dry signal and trimmed.
 | Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
 | Parameters | eleven: 3 × (freq, width, level), dry/wet, output trim | section 2 |
 | Editor | **Yes** | the silent shell was validated first — guide step 6 — and the panel came afterwards |
-| Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand | section 4 |
+| Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand, plus `SpyPresetButton` | section 4 |
+| Vowel presets | five buttons — A E I O U — each writing the nine formant parameters and nothing else | section 2 |
 
 ```
      in --+--> BP(F1, B1) * A1 --+
@@ -202,6 +203,70 @@ Nothing clips inside a float plug-in, but this is the measurement to repeat
 first after any change to the levels or the topology. A level that clips masks
 other faults and sends you chasing the wrong bug.
 
+### The five vowel buttons — A, E, I, O, U
+
+`kVowels` in `VocalFilterDsp.h`. The letters are as they are *said*, so E is
+/i/ ("ee") and I is /ɪ/, not the diphthong /aɪ/ the letter names.
+
+| Button | Sound | F1 | F2 | F3 | B1 | B2 | B3 |
+|---|---|---|---|---|---|---|---|
+| Aaaa | /ɑ/ father | 730 | 1090 | 2440 | 80 | 90 | 120 |
+| Eeee | /i/ beet | 270 | 2290 | 3010 | 50 | 100 | 140 |
+| Iiii | /ɪ/ bit | 390 | 1990 | 2550 | 60 | 100 | 130 |
+| Oooo | /o/ boat | 450 | 900 | 2400 | 60 | 90 | 120 |
+| Uuuu | /u/ boot | 300 | 870 | 2240 | 50 | 90 | 120 |
+
+**Frequencies** are Peterson & Barney adult-male means, so all five sit in one
+consistent voice rather than being collected from wherever — with **one
+exception, marked in the source**: the letter O names a diphthong, /oʊ/, and
+P&B measured only monophthongs, so that row carries the widely used /o/ set
+instead.
+
+**Bandwidths** are chosen within the measured adult spread, narrower at B1 for
+the close vowels /i/ and /u/, because bandwidth rises with formant frequency
+and those two have the lowest F1 of the set.
+
+Measured peaks, from each preset's own impulse response: **728/1100/2452,
+270/2290/3023, 390/1991/2565, 449/907/2410, 300/876/2249 Hz** — every one
+within 0.6 % of its table value.
+
+`VocalFilterParams.cpp` carries a `static_assert` per vowel proving **every
+preset is reachable by its sliders** and that F1 < F2 < F3. A preset outside a
+parameter's range does not fail loudly: `toNormalized` returns something
+outside 0..1, the host clamps it, and the button quietly recalls a different
+vowel from the one on its face. Eeee is the one that would go first — its F3
+is 3010 Hz, most of the way up the F3 range.
+
+### DEVIATION 2 — the levels are one shared profile, and that is a decision
+
+All five presets carry the same 0 / −7 / −12 dB balance. Per-vowel levels were
+**tried and rejected**, and the rejection is the useful part.
+
+The attempt was to derive them the way a cascade synthesiser implies: build the
+all-pole cascade of the three resonances, evaluate its magnitude at each
+formant centre, and set the parallel bank's level so the peak heights match.
+That is principled, and it produces this:
+
+| | A1 | A2 | A3 |
+|---|---|---|---|
+| Aaaa | 0.0 | −3.3 | **−30.9** |
+| Eeee | 0.0 | −16.9 | **−26.9** |
+| Iiii | 0.0 | −10.5 | **−19.3** |
+| Oooo | 0.0 | −8.5 | **−38.5** |
+| Uuuu | 0.0 | −13.0 | **−40.9** |
+
+F3 between −27 and −41 dB is inaudible, and the reason is that a bare cascade
+of three unity-DC resonators has **neither the source's spectral tilt nor a
+higher-pole correction** — a real vocal tract has poles above F3 whose skirts
+hold the upper spectrum up, and a real glottal source is not flat. Modelling
+either properly is a much larger job than this plug-in is.
+
+There is no published parallel-bank amplitude table covering these five, so
+rather than invent one and dress it up as a measurement, every button recalls
+the same balance and the Level sliders are where you shape it. The test suite
+asserts the profile is shared, so if per-vowel levels are ever derived
+properly this note is what fails and points at what was rejected.
+
 ---
 
 ## 3. Deliberate omissions, and where the trap is when you undo them
@@ -263,6 +328,43 @@ SpyBand's own fallback — the colour its editor paints *under* the artwork so
 a missing file reads as a dark panel rather than as whatever the host left in
 the window.
 
+### The vowel buttons
+
+`SpyPresetButton` is new — not in SpyBand. The nearest thing there was
+`SpyFileButton`, which is a SlideSpin with its indicator turned on and a click
+handler on the part that is not the lamp; this is that idea with the lamp
+taken off and the parameter taken away.
+
+It is a `CControl` only to inherit `SpySlider`'s text fitting. It **carries no
+tag and never calls `valueChanged`, `beginEdit` or `endEdit`**, so a host sees
+nothing when it is clicked except the nine parameters the handler then writes.
+Every mouse handler is overridden for that reason — `SpySlider`'s would drag a
+value that is not there. The click fires on mouse **up**, and only if the
+pointer is still inside: pressing a vowel and sliding off it is how you change
+your mind.
+
+`applyVowel` writes each parameter as a **complete gesture** —
+`beginEdit` / `setParamNormalized` / `performEdit` / `endEdit` — so the host
+records it as something it can automate and undo rather than as nine
+unexplained jumps, and every open editor's slider follows because
+`setParamNormalized` comes back through `updateControl`.
+
+**Dry/Wet and Output Trim are deliberately not touched.** They are how the
+plug-in is set up in a mix; the vowel is what it is saying.
+
+### Verifying the layout without building
+
+`tools/render-panel.py` draws the panel to `docs/panel.png` — the SlideSpin
+geometry, the colours, the readouts — so it can be **looked at**. The
+constants are not duplicated in it: they are parsed out of
+`VocalFilterEditor.h` and evaluated in declaration order, and the vowel names
+out of `VocalFilterDsp.h`, so the picture cannot drift from the code. If a
+constant becomes an expression the script cannot evaluate, it fails loudly
+rather than drawing a layout that is not the one that will ship.
+
+The panel is **348 × 229**. Run it after any layout change and look at the
+result; arithmetic that says two controls do not overlap has been wrong before.
+
 ### The trap in `editorDestroyed`
 
 **`dynamic_cast` returns null inside `~EditorView()`**, which is one of its two
@@ -318,7 +420,7 @@ c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-Twenty assertions, all passing. The ones worth knowing about:
+Twenty-eight assertions, all passing. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
@@ -330,6 +432,8 @@ Twenty assertions, all passing. The ones worth knowing about:
   must not be. A guard that has never failed is a guess.
 * **§8 drives every extreme of every range at four sample rates** with
   full-scale noise and requires the output to stay finite and bounded.
+* **§2b measures all five vowel presets** and checks no two are the same, that
+  every one has F1 < F2 < F3, and that the level profile really is shared.
 
 Compare spectra, not samples, when a filter changes: four poles delay the
 signal even where their magnitude is flat, so two runs with identical spectra
@@ -366,4 +470,4 @@ the SDK post-build check reports *"Bundle does not export the required
 'GetPluginFactory' function"*. A PRE_BUILD check catches it and names what
 changed; re-run `./setup-xcode.sh --no-open` and build again. **This applies
 now** — `VocalFilterControls.cpp` and `VocalFilterEditor.cpp` are new since
-the last configure.
+the last successful configure.

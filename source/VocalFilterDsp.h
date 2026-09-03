@@ -141,6 +141,59 @@ constexpr FormantSetting kAaaFormants[kFormantCount] =
 	{ 2440.0, 120.0, -12.0 },   // F3
 };
 
+//------------------------------------------------------------------------
+/** The five vowel buttons: A, E, I, O, U, as the letters are said.
+ *
+ *  FREQUENCIES are the classic adult-male means from Peterson & Barney
+ *  (1952) for the ten monophthongs they measured - so all five sit in one
+ *  consistent voice rather than being collected from wherever. The one
+ *  exception is O: the letter names a diphthong, /ou/, which P&B did not
+ *  measure, so it carries the widely used /o/ set instead. That is the
+ *  only row not from the same table and it is marked below.
+ *
+ *  BANDWIDTHS are chosen within the measured adult spread (B1 50-140,
+ *  B2 62-149, B3 67-223 Hz across studies), narrower at B1 for the close
+ *  vowels - /i/ and /u/ - because bandwidth rises with formant frequency
+ *  and those two have the lowest F1 of the set.
+ *
+ *  LEVELS are the same profile for all five, and that is a DECISION, not
+ *  an oversight. See PORTING-NOTES section 2: deriving them from a
+ *  three-pole cascade was tried and rejected - it puts F3 between -31 and
+ *  -41 dB, which is inaudible, because a bare cascade of unity-DC
+ *  resonators has neither the source's spectral tilt nor a higher-pole
+ *  correction. There is no published parallel-bank amplitude table that
+ *  covers these five, so rather than invent one dressed up as a
+ *  measurement, every button recalls the same balance and the Level
+ *  sliders are where you shape it. */
+struct VowelPreset
+{
+	const char* name;       // what the button says
+	const char* sound;      // what it actually is
+	FormantSetting formants[kFormantCount];
+};
+
+constexpr int kVowelCount = 5;
+
+constexpr VowelPreset kVowels[kVowelCount] =
+{
+	{ "Aaaa", "/a/ as in father",
+	  { kAaaFormants[0], kAaaFormants[1], kAaaFormants[2] } },
+
+	{ "Eeee", "/i/ as in beet",
+	  { {  270.0,  50.0,   0.0 }, { 2290.0, 100.0,  -7.0 }, { 3010.0, 140.0, -12.0 } } },
+
+	{ "Iiii", "/I/ as in bit",
+	  { {  390.0,  60.0,   0.0 }, { 1990.0, 100.0,  -7.0 }, { 2550.0, 130.0, -12.0 } } },
+
+	// NOT Peterson & Barney: /ou/ is a diphthong and they measured only
+	// monophthongs. This is the common /o/ set.
+	{ "Oooo", "/o/ as in boat",
+	  { {  450.0,  60.0,   0.0 }, {  900.0,  90.0,  -7.0 }, { 2400.0, 120.0, -12.0 } } },
+
+	{ "Uuuu", "/u/ as in boot",
+	  { {  300.0,  50.0,   0.0 }, {  870.0,  90.0,  -7.0 }, { 2240.0, 120.0, -12.0 } } },
+};
+
 constexpr double kMixDefault = 100.0;   // fully wet: the model, not a colour
 
 //------------------------------------------------------------------------

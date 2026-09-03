@@ -513,4 +513,107 @@ void SpySelector::onMouseWheelEvent (MouseWheelEvent& event)
 }
 
 //------------------------------------------------------------------------
+// SpyPresetButton
+//------------------------------------------------------------------------
+SpyPresetButton::SpyPresetButton (const CRect& size, const std::string& name)
+: SpySlider (size, nullptr, -1)
+, mName (name)
+{
+}
+
+void SpyPresetButton::setHandler (std::function<void ()> handler)
+{
+	mHandler = std::move (handler);
+}
+
+//------------------------------------------------------------------------
+void SpyPresetButton::draw (CDrawContext* context)
+{
+	// The same outlined box a multi-state SlideSpin draws, so a row of
+	// these sits on the panel as though the DXi had always had them.
+	const CRect r = getViewSize ();
+	const CRect box (r.left, r.top, r.right, r.bottom - kBarBottomInset);
+
+	// Pressed swaps the 3d rect's two edges, which is what Windows did to
+	// show a button down, and fills it so the state is obvious on a dark
+	// panel where a one-pixel edge is not.
+	if (mPressed && mInside)
+	{
+		draw3dRect (context, box, Colours::kBarHigh, Colours::kBarLight);
+		CRect fill (box);
+		fill.inset (1., 1.);
+		if (fill.getWidth () > 0. && fill.getHeight () > 0.)
+		{
+			context->setFillColor (Colours::kBarFill);
+			context->drawRect (fill, kDrawFilled);
+		}
+	}
+	else
+	{
+		draw3dRect (context, box, Colours::kBarLight, Colours::kBarHigh);
+	}
+
+	drawFitted (context, mName, r, mPressed && mInside ? Colours::kLabel : Colours::kValue);
+
+	setDirty (false);
+}
+
+//------------------------------------------------------------------------
+void SpyPresetButton::onMouseDownEvent (MouseDownEvent& event)
+{
+	if (! event.buttonState.isLeft ())
+		return;
+
+	mPressed = true;
+	mInside = true;
+	invalid ();
+	event.consumed = true;
+}
+
+void SpyPresetButton::onMouseMoveEvent (MouseMoveEvent& event)
+{
+	if (! mPressed)
+		return;
+
+	const bool inside = getViewSize ().pointInside (event.mousePosition);
+	if (inside != mInside)
+	{
+		mInside = inside;
+		invalid ();
+	}
+	event.consumed = true;
+}
+
+void SpyPresetButton::onMouseUpEvent (MouseUpEvent& event)
+{
+	if (! mPressed)
+		return;
+
+	const bool fire = mInside && getViewSize ().pointInside (event.mousePosition);
+	mPressed = false;
+	mInside = false;
+	invalid ();
+	event.consumed = true;
+
+	// LAST, because the handler rewrites nine parameters and the frame may
+	// well be redrawn out from under this call.
+	if (fire && mHandler)
+		mHandler ();
+}
+
+void SpyPresetButton::onMouseCancelEvent (MouseCancelEvent& event)
+{
+	mPressed = false;
+	mInside = false;
+	invalid ();
+	event.consumed = true;
+}
+
+void SpyPresetButton::onMouseWheelEvent (MouseWheelEvent&)
+{
+	// Nothing. A wheel over a push button should not do anything, and
+	// SpySlider's would move a value that is not there.
+}
+
+//------------------------------------------------------------------------
 } // namespace VocalFilter

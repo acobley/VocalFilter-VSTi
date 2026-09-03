@@ -193,4 +193,44 @@ private:
 };
 
 //------------------------------------------------------------------------
+/** A momentary push button, for recalling a preset.
+
+    NOT in SpyBand - the nearest thing there was SpyFileButton, which is a
+    SlideSpin with its indicator turned on and a click handler on the part
+    that is not the lamp. This is that idea with the lamp taken off and
+    the parameter taken away.
+
+    It is a CControl only to inherit SpySlider's text fitting; it carries
+    NO TAG and never calls valueChanged, beginEdit or endEdit, so a host
+    sees nothing when it is clicked except the parameters the handler then
+    writes. Every mouse handler is overridden for that reason - SpySlider's
+    would drag a value that is not there.
+
+    The click fires on mouse UP, and only if the pointer is still inside:
+    pressing a vowel and sliding off it is how you change your mind. */
+class SpyPresetButton : public SpySlider
+{
+public:
+	SpyPresetButton (const VSTGUI::CRect& size, const std::string& name);
+
+	void setHandler (std::function<void ()> handler);
+
+	void draw (VSTGUI::CDrawContext* context) override;
+
+	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
+	void onMouseMoveEvent (VSTGUI::MouseMoveEvent& event) override;
+	void onMouseUpEvent (VSTGUI::MouseUpEvent& event) override;
+	void onMouseCancelEvent (VSTGUI::MouseCancelEvent& event) override;
+	void onMouseWheelEvent (VSTGUI::MouseWheelEvent& event) override;
+
+	CLASS_METHODS (SpyPresetButton, SpySlider)
+
+private:
+	std::string mName;
+	std::function<void ()> mHandler;
+	bool mPressed = false;
+	bool mInside = false;
+};
+
+//------------------------------------------------------------------------
 } // namespace VocalFilter

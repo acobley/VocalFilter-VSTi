@@ -160,6 +160,85 @@ int main ()
 	}
 
 	//--------------------------------------------------------------------
+	section ("2b. All five vowel buttons land where their table says");
+	//--------------------------------------------------------------------
+	{
+		// The buttons write nine parameters each. If a preset's peaks do
+		// not come out where the table claims, the button is labelled with
+		// a vowel it does not produce - and nothing else in the plug-in
+		// would ever say so.
+		for (int v = 0; v < kVowelCount; ++v)
+		{
+			const VowelPreset& vowel = kVowels[v];
+
+			Dsp dsp;
+			dsp.setSampleRate (kRate);
+			applyPatch (dsp, vowel.formants);
+			const std::vector<float> h = impulseResponse (dsp, kIR, kRate);
+
+			bool allGood = true;
+			double found[kFormantCount] = { 0.0, 0.0, 0.0 };
+			for (int k = 0; k < kFormantCount; ++k)
+			{
+				const double nominal = vowel.formants[k].freqHz;
+				double best = nominal, bestMag = 0.0;
+				for (double f = nominal * 0.88; f <= nominal * 1.12; f += 1.0)
+				{
+					const double m = responseAt (h, f, kRate);
+					if (m > bestMag) { bestMag = m; best = f; }
+				}
+				found[k] = best;
+				if (std::fabs (best - nominal) / nominal >= 0.03)
+					allGood = false;
+			}
+
+			char label[128];
+			std::snprintf (label, sizeof (label),
+			               "%-5s %-18s peaks %4.0f %4.0f %4.0f Hz",
+			               vowel.name, vowel.sound, found[0], found[1], found[2]);
+			check (allGood, label);
+		}
+	}
+
+	{
+		// Two presets that are accidentally the same - a copy-paste that
+		// was never finished - would give two buttons that sound alike and
+		// nothing would complain.
+		bool allDistinct = true;
+		for (int a = 0; a < kVowelCount; ++a)
+			for (int b = a + 1; b < kVowelCount; ++b)
+			{
+				bool same = true;
+				for (int k = 0; k < kFormantCount; ++k)
+					if (kVowels[a].formants[k].freqHz != kVowels[b].formants[k].freqHz)
+						same = false;
+				if (same) allDistinct = false;
+			}
+		check (allDistinct, "no two vowels have the same formant frequencies");
+
+		// And every one is a vowel: F1 < F2 < F3. Also a static_assert in
+		// VocalFilterParams.cpp, asserted here too because this file is
+		// what someone reads to find out what is guaranteed.
+		bool ordered = true;
+		for (int v = 0; v < kVowelCount; ++v)
+			if (! (kVowels[v].formants[0].freqHz < kVowels[v].formants[1].freqHz &&
+			       kVowels[v].formants[1].freqHz < kVowels[v].formants[2].freqHz))
+				ordered = false;
+		check (ordered, "every vowel has F1 < F2 < F3");
+
+		// The levels are deliberately ONE profile across all five - see
+		// PORTING-NOTES section 2. Asserting it keeps the decision honest:
+		// if per-vowel levels are ever derived, this test fails and points
+		// at the note explaining what was rejected and why.
+		bool sameProfile = true;
+		for (int v = 1; v < kVowelCount; ++v)
+			for (int k = 0; k < kFormantCount; ++k)
+				if (kVowels[v].formants[k].levelDb != kVowels[0].formants[k].levelDb)
+					sameProfile = false;
+		check (sameProfile, "all five share one level profile (a decision, not an oversight)");
+	}
+
+	//--------------------------------------------------------------------
 	section ("3. The filter that RUNS is the filter the editor would DRAW");
 	//--------------------------------------------------------------------
 	{
