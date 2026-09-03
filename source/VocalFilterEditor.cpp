@@ -298,18 +298,88 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 		addSlider (kBottom[column], kBottomLabels[column], r);
 	}
 
+	//--------------------------------------------------------------------
+	// The response display, filling the space the panel grew to the right.
+	//--------------------------------------------------------------------
+	mDisplay = new SpyResponseDisplay (
+		CRect (kDisplayLeft, kDisplayTop,
+		       kDisplayLeft + kDisplayWidth, kDisplayBottom));
+	frame->addView (mDisplay);
+
 	refreshVowelState ();
+	refreshDisplay ();
+
+	// The display follows the DSP, which moves without anything on the
+	// panel being touched - a glide, or a host automating Vowel - so it
+	// has to be pulled on a timer rather than pushed by a control.
+	mTimer = makeOwned<CVSTGUITimer> ([this] (CVSTGUITimer*) { refreshDisplay (); },
+	                                  kTimerMs, true);
 
 	frame->open (parent, platformType);
 	return true;
 }
 
 //------------------------------------------------------------------------
+void VocalFilterEditor::refreshDisplay ()
+{
+	if (mDisplay == nullptr || mController == nullptr)
+		return;
+
+	// WHERE THE DSP ACTUALLY IS, if the processor's published values have
+	// reached us, and where it is HEADED otherwise.
+	//
+	// The fallback is not decoration. A host that does not forward
+	// data.outputParameterChanges to the controller would leave the
+	// published parameters sitting at their defaults for ever, and a
+	// display wired only to those would draw the Aaa patch whatever was
+	// playing. Falling back to the targets costs only the glide's
+	// animation: the curve still shows the right filter, it just arrives
+	// early.
+	const bool live = mController->hasLiveValues ();
+
+	FormantSetting shown[kFormantCount];
+	const FormantSetting* preset = vowelSelection (currentVowel ());
+
+	for (int k = 0; k < kFormantCount; ++k)
+	{
+		if (live)
+		{
+			shown[k].freqHz      = plainOf (liveParam (k, kFieldFreq));
+			shown[k].bandwidthHz = plainOf (liveParam (k, kFieldBandwidth));
+			shown[k].levelDb     = plainOf (liveParam (k, kFieldLevel));
+		}
+		else if (preset != nullptr)
+		{
+			shown[k] = preset[k];
+		}
+		else
+		{
+			shown[k].freqHz      = plainOf (formantParam (k, kFieldFreq));
+			shown[k].bandwidthHz = plainOf (formantParam (k, kFieldBandwidth));
+			shown[k].levelDb     = plainOf (formantParam (k, kFieldLevel));
+		}
+	}
+
+	mDisplay->setFormants (shown, mController->dspSampleRate ());
+}
+
+//------------------------------------------------------------------------
+double VocalFilterEditor::plainOf (ParamID tag) const
+{
+	if (mController == nullptr)
+		return 0.0;
+	return paramDef (tag).toPlain (mController->getParamNormalized (tag));
+}
+
+//------------------------------------------------------------------------
 void PLUGIN_API VocalFilterEditor::close ()
 {
+	mTimer = nullptr;
+
 	mControls.clear ();
 	for (auto*& button : mVowelButtons)
 		button = nullptr;
+	mDisplay = nullptr;
 
 	if (frame)
 	{
@@ -358,6 +428,11 @@ void VocalFilterEditor::controlEndEdit (CControl* control)
 void VocalFilterEditor::updateControl (ParamID tag, ParamValue normalized)
 {
 	if (frame == nullptr)
+		return;
+
+	// The published values have no control behind them; the timer picks
+	// them up. Returning here also keeps them out of mControls lookups.
+	if (isLiveParam (tag))
 		return;
 
 	// The selector moving changes what every formant slider should be

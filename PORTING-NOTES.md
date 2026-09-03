@@ -19,7 +19,7 @@ summed, mixed against the dry signal and trimmed.
 | Buses | **Stereo in, stereo out, and nothing else** | `setBusArrangements` refuses every other layout and `resource/au-info.plist` lists only `2/2` to match — auval is strict about the two agreeing |
 | Sample formats | 32- and 64-bit accepted | the line is float, as these plug-ins were; a 64-bit host is converted through `mScratchIn/Out` rather than refused |
 | Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
-| Parameters | thirteen: 3 × (freq, width, level), dry/wet, glide, output trim, vowel selector | section 2 |
+| Parameters | thirteen settings, plus nine read-only hidden values the processor publishes for the display | sections 2 and 4b |
 | Editor | **Yes** | the silent shell was validated first — guide step 6 — and the panel came afterwards |
 | Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand, plus `SpyPresetButton` | section 4 |
 | Vowel presets | five — A E I O U — reached from the panel or from a host-automatable **Vowel** parameter | sections 2 and 2c |
@@ -133,6 +133,10 @@ wrong control, and list order is a far smaller price than that.
 10  Dry / Wet      %     0 .. 100      default 100
 11  Glide         ms     0 .. 2000     default 150
 12  Vowel         --     Manual, Aaaa, Eeee, Iiii, Oooo, Uuuu   default Manual
+
+13..21  the same nine formant fields again, READ-ONLY and HIDDEN: where the
+        DSP actually is, published for the response display. Not saved -
+        setState and getState both stop at kNumStoredParams (13).
 ```
 
 `kBypass` is 1000, far past the end of the table; everything that indexes
@@ -547,11 +551,18 @@ would otherwise chop the ring off.
 
 ## 4. The editor
 
-`source/VocalFilterControls.{h,cpp}` is **lifted verbatim** from
-`~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.*`, with three changes and no
+`source/VocalFilterControls.{h,cpp}` is **lifted** from
+`~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.*`, with four changes and no
 others: the namespace is `VocalFilter`; the vocoder-specific views are gone
 (`SpyFileButton`, `SpyPatchBoard`, `SpyLedColumn`, `SpyBandMeter`,
-`IPatchBoardListener`); and the banner says so.
+`IPatchBoardListener`); `SpyPresetButton` is new; and **`Colours::kValue` is
+near-white (232, 232, 232) rather than the DXi's red (192, 50, 50)**.
+
+That colour is the one thing that differs between the two copies — keep it in
+mind when diffing them. It was asked for, and it turned out to be necessary
+anyway: the response display needs saturated yellow, green and blue for its
+traces, and a red readout would have been competing with them. The traces are
+now the only saturated thing on the panel.
 
 **The class names are deliberately unchanged.** `SpySlider` is still
 `SpySlider`, so `diff` against SpyBand's copy shows only what genuinely
@@ -604,6 +615,78 @@ slider follows because `setParamNormalized` comes back through
 **Dry/Wet and Output Trim are never touched by a vowel.** They are how the
 plug-in is set up in a mix; the vowel is what it is saying.
 
+### 4b. The response display
+
+`SpyResponseDisplay`, in `VocalFilterDisplay.{h,cpp}` — its own pair of files,
+not in `VocalFilterControls.*`, because that file is SpyBand's control set
+carried across almost unchanged and knows nothing about this plug-in, while
+this view knows what a formant is.
+
+Built in ForTran's `FtCurveView` idiom: a dark plate with a thin light edge, a
+caption top-left, polylines over it. What differs is that there are three
+overlaid curves on a **log frequency axis** with a decibel grid, rather than
+one polyline over an index. F1 yellow, F2 green, F3 blue, with a legend in
+those colours in the top-right so nothing has to be looked up.
+
+The axis is 80 Hz – 8 kHz and +12 to −48 dB, fixed rather than auto-scaling,
+so two vowels can be compared. Log frequency because a linear axis spends two
+thirds of its width above 3 kHz, where nothing in this plug-in lives, and
+squeezes F1 and F2 — the two that decide which vowel you hear — into a
+thumbnail.
+
+**The curves come from `bandpassMagnitude()`**, the same function the DSP's
+coefficients come from. That is the guide's shared-function rule, and it is
+the whole reason the display can be trusted: a private copy of the response
+maths here would agree with the filter today and diverge at some sample rate
+nobody tests.
+
+**A curve is broken where it falls off the bottom of the scale**, not clamped
+to it. Clamping draws a flat line along the floor, which reads as a filter
+doing something quiet across the whole spectrum — F3 at −26.8 dB in the Aaa
+patch has skirts below −48 for most of the width and looked exactly like
+that.
+
+#### Getting live values from the processor to the editor
+
+The display follows the **gliding** values, not the targets, which means they
+have to cross from the processor to the controller — two separate components.
+
+**Nine read-only hidden parameters**, ids 13–21, mirroring the nine formant
+fields with identical ranges so `paramDef()` converts them back with no
+second table. The processor writes them through
+`data.outputParameterChanges`. This is the guide's documented route and the
+reason it is not a message is that **a message sent from `process()` is
+silently discarded** by the host's connection proxy — it returns success and
+does nothing.
+
+They are published **while a glide is running and once more on the block it
+finishes**, so the curve follows the sound and then lands exactly, rather than
+costing a parameter change per formant per block for ever on a value that is
+not moving.
+
+`kIsHidden` (SDK 3.7+) keeps them out of every host's parameter and automation
+lists; it implies `kIsReadOnly` and the absence of `kCanAutomate`, but both
+are stated. `applyParameterChanges` refuses to write them even if a host sends
+one.
+
+**There is a fallback, and it is not decoration.** A host that does not
+forward `outputParameterChanges` to the controller would leave those
+parameters at their defaults for ever, and a display wired only to them would
+draw the Aaa patch whatever was playing. `VocalFilterController::hasLiveValues`
+turns true the first time one actually arrives; until then the editor draws
+the **targets** instead — the preset's values on a preset, the nine
+parameters on Manual. The cost of the fallback is only the glide's animation:
+the curve still shows the right filter, it just arrives early.
+
+**The sample rate travels by message**, from `setActive` — a UI-thread caller,
+where a message is legal. A bandpass's shape is a function of f/fs, so a curve
+drawn at an assumed 44.1 kHz while the DSP runs at 96 k is a filter nobody is
+hearing.
+
+The display is pulled on a **30 ms timer** rather than pushed by a control,
+because what it shows moves without anything on the panel being touched — a
+glide, or a host automating `Vowel`.
+
 ### Verifying the layout without building
 
 `tools/render-panel.py` draws the panel to `docs/panel.png` — the SlideSpin
@@ -614,8 +697,9 @@ out of `VocalFilterDsp.h`, so the picture cannot drift from the code. If a
 constant becomes an expression the script cannot evaluate, it fails loudly
 rather than drawing a layout that is not the one that will ship.
 
-The panel is **348 × 229**, with Glide in the bottom row between Dry/Wet and
-Output Trim. A second argument picks which vowel button to draw lit —
+The panel is **664 × 229**. It grew RIGHTWARDS to make room for the response
+display — every slider position is unchanged by its arrival, which is what
+having the layout come out of one grid buys. A second argument picks which vowel button to draw lit —
 `docs/panel.png` is the default state, Manual with none lit, and
 `docs/panel-vowel.png` shows Aaaa selected. Run it after any layout change and look at the
 result; arithmetic that says two controls do not overlap has been wrong before.

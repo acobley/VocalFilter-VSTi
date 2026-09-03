@@ -8,6 +8,7 @@
 
 #include "base/source/fstreamer.h"
 #include "pluginterfaces/base/ustring.h"
+#include "pluginterfaces/vst/ivstmessage.h"
 #include "public.sdk/source/vst/vstparameters.h"
 
 #include <algorithm>
@@ -52,7 +53,14 @@ void VocalFilterController::addParameters ()
 		UString (title, str16BufferSize (String128)).assign (def.title ? def.title : "Parameter");
 		UString (units, str16BufferSize (String128)).assign (def.units ? def.units : "");
 
-		int32 flags = ParameterInfo::kCanAutomate;
+		// The published values are READ-ONLY and HIDDEN: no host lists
+		// them, nothing outside the plug-in can write them, and they
+		// exist only as the route data.outputParameterChanges travels on.
+		// kIsHidden implies kIsReadOnly and the absence of kCanAutomate,
+		// but saying both is clearer than relying on that.
+		int32 flags = isLiveParam (id)
+			? (ParameterInfo::kIsReadOnly | ParameterInfo::kIsHidden)
+			: ParameterInfo::kCanAutomate;
 
 		// An enumerated parameter is a StringListParameter, not a
 		// RangeParameter with a step count: the host shows the names, and
@@ -127,12 +135,14 @@ tresult PLUGIN_API VocalFilterController::setComponentState (IBStream* state)
 	if (!streamer.readInt32 (version))
 		return kResultFalse;
 
-	for (ParamID id = 0; id < kNumParams; ++id)
+	// Only the SETTINGS are in the stream - the published values are a
+	// view of the DSP, and the processor does not write them either.
+	for (ParamID id = 0; id < kNumStoredParams; ++id)
 		setParamNormalized (id, kParams[id].defaultNormalized ());
 	setParamNormalized (kBypass, 0.0);
 
 	double value = 0.0;
-	for (ParamID id = 0; id < kNumParams; ++id)
+	for (ParamID id = 0; id < kNumStoredParams; ++id)
 	{
 		if (!streamer.readDouble (value))
 			break;
@@ -144,6 +154,26 @@ tresult PLUGIN_API VocalFilterController::setComponentState (IBStream* state)
 		setParamNormalized (kBypass, bypass ? 1.0 : 0.0);
 
 	return kResultOk;
+}
+
+//------------------------------------------------------------------------
+tresult PLUGIN_API VocalFilterController::notify (IMessage* message)
+{
+	if (message == nullptr)
+		return kInvalidArgument;
+
+	if (FIDStringsEqual (message->getMessageID (), kVocalFilterSampleRateMessage))
+	{
+		double rate = 0.0;
+		if (message->getAttributes ()->getFloat (kVocalFilterSampleRateAttribute, rate)
+		        == kResultOk && rate > 0.0)
+		{
+			mSampleRate = rate;
+		}
+		return kResultOk;
+	}
+
+	return EditControllerEx1::notify (message);
 }
 
 //------------------------------------------------------------------------
@@ -160,6 +190,12 @@ tresult PLUGIN_API VocalFilterController::setParamNormalized (ParamID tag, Param
 	const tresult result = EditControllerEx1::setParamNormalized (tag, value);
 	if (result != kResultOk)
 		return result;
+
+	// A published value arriving is the proof that this host forwards
+	// data.outputParameterChanges at all. Until one does, the display
+	// draws the targets.
+	if (isLiveParam (tag))
+		mHaveLiveValues = true;
 
 	// The host, an automation lane and the panel all arrive here, so this
 	// is the one place a control's position is kept in step with the

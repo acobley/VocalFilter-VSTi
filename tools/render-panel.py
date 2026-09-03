@@ -15,6 +15,7 @@ what this draws if the argument is left off) or 1..5 to show one of the
 vowel buttons lit, as it is when the Vowel parameter is on a preset.
 """
 
+import math
 import os
 import re
 import sys
@@ -58,7 +59,7 @@ SCALE = 2                                              # so the text is legible
 
 PANEL = (64, 64, 64)
 LABEL = (50, 255, 50)
-VALUE = (192, 50, 50)
+VALUE = (232, 232, 232)
 BAR_LIGHT = (200, 200, 200)
 BAR_HIGH = (255, 255, 255)
 BAR_FILL = (100, 100, 100)
@@ -144,6 +145,86 @@ for c in range(3):
     for r, lab in enumerate(('Freq', 'Width', 'Level')):
         x0, y0, x1, y1 = cell(c, r)
         slider(x0, y0, x1, y1, lab, AAA[c][r], (0.55, 0.2, 0.7)[r])
+
+# ---------------------------------------------------------------------------
+# The response display.
+#
+# The curve maths below is a RE-IMPLEMENTATION of bandpassMagnitude for the
+# mock - the real one is in VocalFilterDsp.cpp and is what the plug-in draws.
+# Do not read a small difference between this picture and the plug-in as a
+# bug: what this script is for is checking that the panel FITS, that nothing
+# collides and that the legend is readable.
+# ---------------------------------------------------------------------------
+TRACE = ((255, 214, 64), (72, 226, 86), (96, 160, 255))
+MIN_HZ, MAX_HZ, MAX_DB, MIN_DB = 80.0, 8000.0, 12.0, -48.0
+FS = 44100.0
+
+
+def bandpass_db(f0, bw, hz, gain_db):
+    q = min(max(f0 / max(bw, 1.0), 0.3), 60.0)
+    w0 = 2 * math.pi * f0 / FS
+    alpha = math.sin(w0) / (2 * q)
+    a0 = 1 + alpha
+    b0, b2 = alpha / a0, -alpha / a0
+    a1, a2 = (-2 * math.cos(w0)) / a0, (1 - alpha) / a0
+    w = 2 * math.pi * hz / FS
+    cw, sw, c2, s2 = math.cos(w), math.sin(w), math.cos(2 * w), math.sin(2 * w)
+    nre, nim = b0 + b2 * c2, -(b2 * s2)
+    dre, dim = 1 + a1 * cw + a2 * c2, -(a1 * sw + a2 * s2)
+    den = math.hypot(dre, dim)
+    mag = (math.hypot(nre, nim) / den) if den > 1e-30 else 0.0
+    return 20 * math.log10(max(mag * (10 ** (gain_db / 20.0)), 1e-6))
+
+
+dl, dt = env['kDisplayLeft'], env['kDisplayTop']
+dr, dbm = dl + env['kDisplayWidth'], env['kDisplayBottom']
+d.rectangle([dl * SCALE, dt * SCALE, dr * SCALE - 1, dbm * SCALE - 1],
+            fill=(20, 20, 20), outline=(150, 150, 150))
+
+px0, py0, px1, py1 = dl + 6, dt + 5 + 12, dr - 6, dbm - 5
+
+
+def x_of(hz):
+    t = (math.log10(hz) - math.log10(MIN_HZ)) / (math.log10(MAX_HZ) - math.log10(MIN_HZ))
+    return px0 + (px1 - px0) * min(1.0, max(0.0, t))
+
+
+def y_of(v):
+    t = (MAX_DB - v) / (MAX_DB - MIN_DB)
+    return py0 + (py1 - py0) * min(1.0, max(0.0, t))
+
+
+for hz in (100, 200, 500, 1000, 2000, 5000):
+    g = 90 if hz in (100, 1000) else 60
+    d.line([x_of(hz) * SCALE, py0 * SCALE, x_of(hz) * SCALE, py1 * SCALE], fill=(g, g, g))
+for v in (0, -12, -24, -36):
+    g = 90 if v == 0 else 60
+    d.line([px0 * SCALE, y_of(v) * SCALE, px1 * SCALE, y_of(v) * SCALE], fill=(g, g, g))
+
+cap = (dl + 5, dt + 4)
+d.text((cap[0] * SCALE, cap[1] * SCALE), "Filter response", fill=(200, 200, 200), font=F7)
+lx = dr - 5 - 66
+for k in range(3):
+    d.text((lx * SCALE, cap[1] * SCALE), f"F{k+1}", fill=TRACE[k], font=F7)
+    lx += 22
+
+FORMANTS = ((730, 80, 0.0), (1090, 90, -3.3), (2440, 120, -26.8))
+for k, (f0, bw, lvl) in enumerate(FORMANTS):
+    # Broken where it falls off the bottom, as the plug-in draws it: clamping
+    # to the floor draws a flat line across the whole width instead.
+    run = []
+    for i in range(240):
+        t = i / 239.0
+        hz = MIN_HZ * (MAX_HZ / MIN_HZ) ** t
+        v = bandpass_db(f0, bw, hz, lvl)
+        if v < MIN_DB:
+            if len(run) > 1:
+                d.line(run, fill=TRACE[k], width=SCALE)
+            run = []
+            continue
+        run.append((x_of(hz) * SCALE, y_of(v) * SCALE))
+    if len(run) > 1:
+        d.line(run, fill=TRACE[k], width=SCALE)
 
 # bottom row
 BOTTOM = (('Dry / Wet', '100.0 %', 1.0),

@@ -54,6 +54,15 @@ private:
 	/** Push mParams into the DSP. */
 	void pushParameters ();
 
+	/** Publish where the formants actually ARE, for the response display.
+	    Called from process(), which is why it uses
+	    data.outputParameterChanges and not a message. */
+	void publishLiveValues (Steinberg::Vst::IParameterChanges* out);
+
+	/** Processor -> controller, from setActive - a UI-thread caller, so a
+	    message is legal here. */
+	void sendSampleRateToController ();
+
 	Dsp mDsp;
 
 	/** Normalised parameter values, indexed by Param. */
@@ -61,6 +70,10 @@ private:
 	bool mBypass = false;
 
 	double mSampleRate = 44100.0;
+
+	/** Publishing every block would be waste; publishing only on change
+	    would miss the last frame of a glide. This tracks the edge. */
+	bool mWasGliding = true;
 
 	/** 64-bit processing goes through these. The line is float, as the
 	    original plug-ins were, but a 64-bit host is accepted rather than

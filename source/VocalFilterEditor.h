@@ -16,6 +16,7 @@
 #pragma once
 
 #include "VocalFilterControls.h"
+#include "VocalFilterDisplay.h"
 #include "VocalFilterParams.h"
 
 #include "public.sdk/source/vst/vstguieditor.h"
@@ -82,8 +83,23 @@ public:
 	static constexpr int kBottomRowTop =
 		kGridTop + kRows * (kSliderHeight + kRowGap) - kRowGap + kSectionGap;
 
-	static constexpr int kEditorWidth  = kMargin * 2 + kContentWidth;
+	/** The response display, to the RIGHT of the controls. The panel grew
+	    rightwards to make room rather than the controls being squeezed:
+	    every slider position below is unchanged by its arrival. */
+	static constexpr int kDisplayGap   = 16;
+	static constexpr int kDisplayWidth = 300;
+	static constexpr int kDisplayLeft  = kMargin + kContentWidth + kDisplayGap;
+	static constexpr int kDisplayTop    = kVowelTop;
+	static constexpr int kDisplayBottom = kBottomRowTop + kSliderHeight;
+
+	static constexpr int kEditorWidth  =
+		kDisplayLeft + kDisplayWidth + kMargin;
 	static constexpr int kEditorHeight = kBottomRowTop + kSliderHeight + kMargin;
+
+	/** How often the display asks the controller where the DSP is. 30 ms
+	    is about 33 fps - fast enough that a 150 ms glide is a movement
+	    rather than three steps, and slow enough to cost nothing. */
+	static constexpr int kTimerMs = 30;
 
 private:
 	VSTGUI::CRect cell (int column, int row) const;
@@ -117,6 +133,12 @@ private:
 	    the parameters'. Display only; nothing is written. */
 	void refreshVowelState ();
 
+	/** The timer's work: hand the display where the formants are now. */
+	void refreshDisplay ();
+
+	/** One parameter's value in its own plain unit. */
+	double plainOf (Steinberg::Vst::ParamID tag) const;
+
 	/** A slider bound to a parameter, labelled, and formatting its own
 	    readout from the SAME table the host reads. */
 	SpySlider* addSlider (Steinberg::Vst::ParamID tag, const char* label,
@@ -128,6 +150,9 @@ private:
 
 	std::map<Steinberg::Vst::ParamID, VSTGUI::CControl*> mControls;
 	SpyPresetButton* mVowelButtons[kVowelCount] = { nullptr };
+	SpyResponseDisplay* mDisplay = nullptr;
+
+	VSTGUI::SharedPointer<VSTGUI::CVSTGUITimer> mTimer;
 };
 
 //------------------------------------------------------------------------

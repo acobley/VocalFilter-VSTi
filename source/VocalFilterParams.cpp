@@ -46,6 +46,20 @@ const ParamDef kParams[kNumParams] =
 	// on a preset instead would make a new user's first slider drag do
 	// nothing they could see a reason for.
 	{ kVowel,                       "Vowel",        "",   ParamType::Enum,  0.0,                 kVowelCount,         kVowelManual,                   0.0,                 kVowelCount,         kVowelCount, false },
+
+	// The published values. Identical ranges to the nine they mirror, so
+	// the display converts them back through the same paramDef().
+	{ kLiveF1Freq,                  "F1 Live Freq", "Hz", ParamType::Float, kFormantFreqMin[0],  kFormantFreqMax[0],  kAaaFormants[0].freqHz,         kFormantFreqMin[0],  kFormantFreqMax[0],  0,    false },
+	{ kLiveF1Bandwidth,             "F1 Live Width","Hz", ParamType::Float, kBandwidthMin,       kBandwidthMax,       kAaaFormants[0].bandwidthHz,    kBandwidthMin,       kBandwidthMax,       0,    false },
+	{ kLiveF1Level,                 "F1 Live Level","dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[0].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    false },
+
+	{ kLiveF2Freq,                  "F2 Live Freq", "Hz", ParamType::Float, kFormantFreqMin[1],  kFormantFreqMax[1],  kAaaFormants[1].freqHz,         kFormantFreqMin[1],  kFormantFreqMax[1],  0,    false },
+	{ kLiveF2Bandwidth,             "F2 Live Width","Hz", ParamType::Float, kBandwidthMin,       kBandwidthMax,       kAaaFormants[1].bandwidthHz,    kBandwidthMin,       kBandwidthMax,       0,    false },
+	{ kLiveF2Level,                 "F2 Live Level","dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[1].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    false },
+
+	{ kLiveF3Freq,                  "F3 Live Freq", "Hz", ParamType::Float, kFormantFreqMin[2],  kFormantFreqMax[2],  kAaaFormants[2].freqHz,         kFormantFreqMin[2],  kFormantFreqMax[2],  0,    false },
+	{ kLiveF3Bandwidth,             "F3 Live Width","Hz", ParamType::Float, kBandwidthMin,       kBandwidthMax,       kAaaFormants[2].bandwidthHz,    kBandwidthMin,       kBandwidthMax,       0,    false },
+	{ kLiveF3Level,                 "F3 Live Level","dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[2].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    false },
 };
 
 //------------------------------------------------------------------------
@@ -54,7 +68,10 @@ const ParamDef kParams[kNumParams] =
 // wrong place is exactly the kind of mistake that presents as "the width
 // slider moves the level".
 //------------------------------------------------------------------------
-static_assert (kNumParams == 13, "thirteen parameters: trim, 3 x 3 formant, mix, glide, vowel");
+static_assert (kNumParams == 22, "thirteen settings plus nine published values");
+static_assert (kNumStoredParams == 13, "only the settings are saved");
+static_assert (liveParam (0, kFieldFreq)  == kLiveF1Freq,  "live F1 freq id");
+static_assert (liveParam (2, kFieldLevel) == kLiveF3Level, "live F3 level id");
 static_assert (formantParam (0, kFieldFreq)      == kF1Freq,      "F1 freq id");
 static_assert (formantParam (0, kFieldBandwidth) == kF1Bandwidth, "F1 width id");
 static_assert (formantParam (0, kFieldLevel)     == kF1Level,     "F1 level id");

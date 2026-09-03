@@ -6,6 +6,7 @@
 #include "VocalFilterIDs.h"
 
 #include "base/source/fstreamer.h"
+#include "pluginterfaces/vst/ivstmessage.h"
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 
 #include <algorithm>
@@ -79,6 +80,8 @@ tresult PLUGIN_API VocalFilterProcessor::setActive (TBool state)
 	{
 		pushParameters ();
 		mDsp.reset ();
+		mWasGliding = true;              // publish once on the first block
+		sendSampleRateToController ();
 	}
 	return AudioEffect::setActive (state);
 }
@@ -151,8 +154,8 @@ void VocalFilterProcessor::applyParameterChanges (IParameterChanges* changes)
 		// table.
 		if (id == kBypass)
 			mBypass = (value >= 0.5);
-		else if (id < kNumParams)
-			mParams[id] = value;
+		else if (id < kNumParams && !isLiveParam (id))
+			mParams[id] = value;      // the published ones are ours to write
 	}
 }
 
@@ -201,10 +204,64 @@ void VocalFilterProcessor::pushParameters ()
 }
 
 //------------------------------------------------------------------------
+void VocalFilterProcessor::sendSampleRateToController ()
+{
+	if (IPtr<IMessage> message = owned (allocateMessage ()))
+	{
+		message->setMessageID (kVocalFilterSampleRateMessage);
+		message->getAttributes ()->setFloat (kVocalFilterSampleRateAttribute, mSampleRate);
+		sendMessage (message);
+	}
+}
+
+//------------------------------------------------------------------------
+void VocalFilterProcessor::publishLiveValues (IParameterChanges* out)
+{
+	if (out == nullptr)
+		return;
+
+	for (int formant = 0; formant < kFormantCount; ++formant)
+	{
+		const double plain[3] = { mDsp.formantFreq (formant),
+		                          mDsp.formantBandwidth (formant),
+		                          // back to dB, and the floor is a real
+		                          // silence rather than log(0).
+		                          mDsp.formantGain (formant) > 0.0
+		                              ? 20.0 * std::log10 (mDsp.formantGain (formant))
+		                              : kLevelMinDb };
+		const FormantField fields[3] = { kFieldFreq, kFieldBandwidth, kFieldLevel };
+
+		for (int j = 0; j < 3; ++j)
+		{
+			const ParamID id = liveParam (formant, fields[j]);
+			const double n = std::min (1.0, std::max (0.0,
+				kParams[id].toNormalized (plain[j])));
+
+			int32 index = 0;
+			if (IParamValueQueue* queue = out->addParameterData (id, index))
+			{
+				int32 point = 0;
+				queue->addPoint (0, n, point);
+			}
+		}
+	}
+}
+
+//------------------------------------------------------------------------
 tresult PLUGIN_API VocalFilterProcessor::process (ProcessData& data)
 {
 	applyParameterChanges (data.inputParameterChanges);
 	pushParameters ();
+
+	// WHERE THE FORMANTS ARE, for the response display. Published while a
+	// glide is running and once more on the block it finishes, so the
+	// curve follows the sound and then lands exactly - rather than every
+	// block for ever, which would be a parameter change per formant per
+	// block for a value that is not moving.
+	const bool gliding = mDsp.gliding ();
+	if (gliding || mWasGliding)
+		publishLiveValues (data.outputParameterChanges);
+	mWasGliding = gliding;
 
 	// A parameter-only block. Legal, and common when a host is drawing
 	// automation while the transport is stopped.
@@ -318,12 +375,14 @@ tresult PLUGIN_API VocalFilterProcessor::setState (IBStream* state)
 	// not to whatever the last project left in this instance. Without
 	// this, loading an old project after a new one inherits the new one's
 	// settings for every parameter added since.
-	for (ParamID id = 0; id < kNumParams; ++id)
+	// Only the SETTINGS are stored - the published values are a view of
+	// the DSP, not something to save and restore.
+	for (ParamID id = 0; id < kNumStoredParams; ++id)
 		mParams[id] = kParams[id].defaultNormalized ();
 	mBypass = false;
 
 	double value = 0.0;
-	for (ParamID id = 0; id < kNumParams; ++id)
+	for (ParamID id = 0; id < kNumStoredParams; ++id)
 	{
 		if (!streamer.readDouble (value))
 			break;
@@ -351,7 +410,7 @@ tresult PLUGIN_API VocalFilterProcessor::getState (IBStream* state)
 	if (!streamer.writeInt32 (kStateVersion))
 		return kResultFalse;
 
-	for (ParamID id = 0; id < kNumParams; ++id)
+	for (ParamID id = 0; id < kNumStoredParams; ++id)
 	{
 		if (!streamer.writeDouble (mParams[id]))
 			return kResultFalse;

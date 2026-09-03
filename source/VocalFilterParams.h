@@ -70,6 +70,24 @@ enum Param : Steinberg::Vst::ParamID
 	//--------------------------------------------------------------------
 	kVowel,                                 // 12  0 = Manual, 1..5 = presets
 
+	//--------------------------------------------------------------------
+	// WHERE THE DSP ACTUALLY IS, published by the processor for the
+	// response display. Read-only and hidden, so no host shows them and
+	// nothing outside the plug-in can write them.
+	//
+	// This is the porting guide's route for a per-block value travelling
+	// from the processor to the controller, and the reason it is not a
+	// message is that a message sent from process() is silently discarded
+	// by the host's connection proxy - it returns success and does
+	// nothing. data.outputParameterChanges is the mechanism that works.
+	//
+	// Same layout as the nine above: base + formant * 3 + field, in the
+	// same units, so paramDef() converts them back with no second table.
+	//--------------------------------------------------------------------
+	kLiveF1Freq, kLiveF1Bandwidth, kLiveF1Level,     // 13, 14, 15
+	kLiveF2Freq, kLiveF2Bandwidth, kLiveF2Level,     // 16, 17, 18
+	kLiveF3Freq, kLiveF3Bandwidth, kLiveF3Level,     // 19, 20, 21
+
 	kNumParams
 };
 
@@ -82,6 +100,24 @@ constexpr Steinberg::Vst::ParamID formantParam (int formant, FormantField field)
 {
 	return static_cast<Steinberg::Vst::ParamID> (kFormantBase + formant * 3 + field);
 }
+
+constexpr Steinberg::Vst::ParamID kLiveBase = kLiveF1Freq;
+
+/** The published counterpart of one formant field. */
+constexpr Steinberg::Vst::ParamID liveParam (int formant, FormantField field)
+{
+	return static_cast<Steinberg::Vst::ParamID> (kLiveBase + formant * 3 + field);
+}
+
+inline bool isLiveParam (Steinberg::Vst::ParamID id)
+{
+	return id >= kLiveBase && id < kNumParams;
+}
+
+/** Everything up to here is saved in the plug-in's state; the published
+    values are not, because they are a view of the DSP rather than a
+    setting. Both sides of setState/getState stop at this id. */
+constexpr Steinberg::Vst::ParamID kNumStoredParams = kLiveBase;
 
 /** The VST3 bypass, which hosts expect. 1000 is the convention, and it is
     far past the end of kParams - so RANGE-CHECK every id before indexing

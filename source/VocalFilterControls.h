@@ -1,13 +1,21 @@
 //------------------------------------------------------------------------
 // VocalFilter - custom VSTGUI controls
 //
-// LIFTED VERBATIM from ~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.*,
-// with three changes and no others:
+// LIFTED from ~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.*, with these
+// changes and no others:
 //
 //   * the namespace is VocalFilter;
 //   * the vocoder-specific views are gone - SpyFileButton, SpyPatchBoard,
 //     SpyLedColumn, SpyBandMeter and IPatchBoardListener, none of which
 //     has anything to model here;
+//   * SpyPresetButton is new - a momentary push button that is also a
+//     state indicator, for the vowel row;
+//   * kValue IS NOT THE DXi's RED. The original is (192, 50, 50), and it
+//     is still what SpyBand uses; here the readouts are near-white
+//     instead. Asked for, and it reads better against the response
+//     display's traces, which need the saturated colours for themselves.
+//     THIS IS THE ONE COLOUR THAT DIFFERS between the two copies - keep
+//     it in mind when diffing them;
 //   * this comment.
 //
 // THE CLASS NAMES ARE DELIBERATELY UNCHANGED. SpySlider is still
@@ -40,7 +48,7 @@ const VSTGUI::CColor kBarLight   (200, 200, 200, 255);  // Draw3dRect top-left
 const VSTGUI::CColor kBarHigh    (255, 255, 255, 255);  // Draw3dRect bottom-right
 const VSTGUI::CColor kBarFill    (100, 100, 100, 255);
 const VSTGUI::CColor kLabel      ( 50, 255,  50, 255);  // SetTextColor, green
-const VSTGUI::CColor kValue      (192,  50,  50, 255);  // DrawTheText, red
+const VSTGUI::CColor kValue      (232, 232, 232, 255);  // DrawTheText - see the banner
 const VSTGUI::CColor kLampOn     (255,   0,   0, 255);
 const VSTGUI::CColor kLampOff    (  0,   0,   0, 255);
 const VSTGUI::CColor kLampFrame  (100, 100, 100, 255);
