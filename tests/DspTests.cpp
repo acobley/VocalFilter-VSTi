@@ -226,16 +226,122 @@ int main ()
 				ordered = false;
 		check (ordered, "every vowel has F1 < F2 < F3");
 
-		// The levels are deliberately ONE profile across all five - see
-		// PORTING-NOTES section 2. Asserting it keeps the decision honest:
-		// if per-vowel levels are ever derived, this test fails and points
-		// at the note explaining what was rejected and why.
-		bool sameProfile = true;
-		for (int v = 1; v < kVowelCount; ++v)
+		// THE LEVELS MUST DIFFER BETWEEN VOWELS. A vocal tract is an
+		// all-pole filter, so amplitudes are a consequence of the
+		// frequencies, not free parameters; giving all five the same
+		// profile - which this table did until DEVIATION 2 - flattens a
+		// range F3 genuinely spans. The assertion is the shape of that
+		// range, not the individual numbers, so refitting the levels does
+		// not break it but going back to a flat profile does.
+		double loF3 = 1e9, hiF3 = -1e9;
+		bool anySameProfile = false;
+		for (int v = 0; v < kVowelCount; ++v)
+		{
+			loF3 = std::min (loF3, kVowels[v].formants[2].levelDb);
+			hiF3 = std::max (hiF3, kVowels[v].formants[2].levelDb);
+			for (int w = v + 1; w < kVowelCount; ++w)
+			{
+				bool same = true;
+				for (int k = 1; k < kFormantCount; ++k)   // F1 is pinned at 0 dB
+					if (kVowels[v].formants[k].levelDb != kVowels[w].formants[k].levelDb)
+						same = false;
+				if (same) anySameProfile = true;
+			}
+		}
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "F3 level spans %.1f dB across the five vowels", hiF3 - loF3);
+		check (! anySameProfile && (hiF3 - loF3) > 20.0, label);
+
+		// F1 is the reference and stays at 0 dB in every vowel, which is
+		// what keeps the five at roughly equal loudness. The tract alone
+		// would make Eeee 11 dB quieter than Aaaa; a button that drops the
+		// mix 11 dB is not what anyone wants from an effect.
+		bool f1Pinned = true;
+		for (int v = 0; v < kVowelCount; ++v)
+			if (kVowels[v].formants[0].levelDb != 0.0)
+				f1Pinned = false;
+		check (f1Pinned, "F1 is pinned at 0 dB in every vowel (equal-loudness by design)");
+
+		// The back vowels must keep F3 clear of the Level parameter's own
+		// silence floor, or a small nudge switches F3 off entirely.
+		bool clearOfFloor = true;
+		for (int v = 0; v < kVowelCount; ++v)
 			for (int k = 0; k < kFormantCount; ++k)
-				if (kVowels[v].formants[k].levelDb != kVowels[0].formants[k].levelDb)
-					sameProfile = false;
-		check (sameProfile, "all five share one level profile (a decision, not an oversight)");
+				if (kVowels[v].formants[k].levelDb < kLevelMinDb + 8.0)
+					clearOfFloor = false;
+		check (clearOfFloor, "no vowel sits within 8 dB of the level floor");
+	}
+
+	{
+		// POLARITY. F2 is summed inverted, and that is load-bearing: it is
+		// what puts the region BETWEEN two formants where an all-pole
+		// tract puts it. If it is ever dropped, the peaks stay exactly
+		// where they are and only the valleys move, so nothing else in
+		// this suite would notice - hence a test that looks at a valley.
+		//
+		// Summed IN PHASE the two branches are half a turn apart between
+		// the formants and cancel, digging a spurious null a real tract
+		// does not have; inverting F2 fills it in. The first version of
+		// this test asserted the opposite - that inverting DEEPENED the
+		// valley - and failed, which is how the direction got settled.
+		Dsp dsp;
+		dsp.setSampleRate (kRate);
+		applyPatch (dsp, kAaaFormants);
+		const std::vector<float> h = impulseResponse (dsp, kIR, kRate);
+
+		// Compute BOTH candidate curves from the shared response function -
+		// the bank as it is summed, and the same bank summed in phase -
+		// and require the running filter to match the first and not the
+		// second. No threshold picked by hand: the test discriminates
+		// between two concrete alternatives, and prints how far apart they
+		// are so a reader can see it had something to discriminate.
+		auto valleyOf = [&] (bool invertF2)
+		{
+			double lowest = 1e9;
+			for (double f = kAaaFormants[0].freqHz + 20.0;
+			     f < kAaaFormants[1].freqHz - 20.0; f += 1.0)
+			{
+				double sumRe = 0.0, sumIm = 0.0;
+				for (int k = 0; k < kFormantCount; ++k)
+				{
+					double re = 0.0, im = 0.0;
+					bandpassResponse (kAaaFormants[k].freqHz, kAaaFormants[k].bandwidthHz,
+					                  f, kRate, re, im);
+					const double sign = (k == 1 && invertF2) ? -1.0 : 1.0;
+					const double g = dbToLinear (kAaaFormants[k].levelDb, kLevelMinDb) * sign;
+					sumRe += re * g;
+					sumIm += im * g;
+				}
+				lowest = std::min (lowest, std::sqrt (sumRe * sumRe + sumIm * sumIm));
+			}
+			return lowest;
+		};
+
+		double measured = 1e9, at = 0.0;
+		for (double f = kAaaFormants[0].freqHz + 20.0;
+		     f < kAaaFormants[1].freqHz - 20.0; f += 1.0)
+		{
+			const double m = responseAt (h, f, kRate);
+			if (m < measured) { measured = m; at = f; }
+		}
+
+		const double inverted = valleyOf (true);
+		const double inPhase  = valleyOf (false);
+
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "F1-F2 valley at %.0f Hz: inverted %.1f dB, in phase %.1f dB, got %.1f",
+		               at, db (inverted), db (inPhase), db (measured));
+		// The two must actually differ, or this proves nothing...
+		const bool discriminates = std::fabs (db (inverted) - db (inPhase)) > 3.0;
+		// ...and the running filter must be the inverted one.
+		const bool matches = std::fabs (db (measured) - db (inverted)) < 0.5;
+		check (discriminates && matches, label);
+
+		// And the constant that makes it happen is the one that says so.
+		check (kFormantPolarity[0] > 0.0 && kFormantPolarity[1] < 0.0 &&
+		       kFormantPolarity[2] > 0.0, "polarity is + - +");
 	}
 
 	//--------------------------------------------------------------------

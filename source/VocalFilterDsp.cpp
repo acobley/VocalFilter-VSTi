@@ -141,10 +141,13 @@ double bankMagnitude (const FormantSetting* formants, int count,
 		bandpassResponse (formants[k].freqHz, formants[k].bandwidthHz,
 		                  freqHz, sampleRate, re, im);
 
-		// COMPLEX sum, weighted by the formant's own level - see the note
-		// in the header. Summing |H| here instead is the bug the test
-		// suite was written to catch.
-		const double gain = dbToLinear (formants[k].levelDb, kLevelMinDb);
+		// COMPLEX sum, weighted by the formant's own level AND ITS SIGN -
+		// see the notes in the header. Summing |H| here instead is the bug
+		// the test suite was written to catch; dropping the sign would be
+		// the same mistake in a quieter form, since the polarity is what
+		// puts the region between two formants where a tract puts it.
+		const double gain = dbToLinear (formants[k].levelDb, kLevelMinDb)
+		                  * kFormantPolarity[k];
 		sumRe += re * gain;
 		sumIm += im * gain;
 	}
@@ -351,9 +354,10 @@ void Dsp::process (const float* inLeft, const float* inRight,
 		const double dryR = inRight[i];
 
 		double wetL = 0.0, wetR = 0.0;
-		for (Formant& f : mFormant)
+		for (int k = 0; k < kFormantCount; ++k)
 		{
-			const double gain = f.gain.value ();
+			Formant& f = mFormant[k];
+			const double gain = f.gain.value () * kFormantPolarity[k];
 			wetL += f.filter[0].process (dryL) * gain;
 			wetR += f.filter[1].process (dryR) * gain;
 		}

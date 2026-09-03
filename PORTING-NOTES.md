@@ -126,10 +126,10 @@ wrong control, and list order is a far smaller price than that.
  3  F1 Level      dB   -40 .. +12      default   0
  4  F2 Freq       Hz   500 .. 3000     default 1090
  5  F2 Width      Hz    20 .. 400      default  90
- 6  F2 Level      dB   -40 .. +12      default  -7
+ 6  F2 Level      dB   -40 .. +12      default  -3.3
  7  F3 Freq       Hz  1500 .. 4000     default 2440
  8  F3 Width      Hz    20 .. 400      default 120
- 9  F3 Level      dB   -40 .. +12      default -12
+ 9  F3 Level      dB   -40 .. +12      default -26.8
 10  Dry / Wet      %     0 .. 100      default 100
 11  Glide         ms     0 .. 2000     default 150
 ```
@@ -160,7 +160,7 @@ enough for every English vowel and then some.
 |---|---|---|---|
 | Frequency | 730 Hz | 1090 Hz | 2440 Hz |
 | Bandwidth | 80 Hz | 90 Hz | 120 Hz |
-| Level | 0 dB | −7 dB | −12 dB |
+| Level | 0 dB | −3.3 dB | −26.8 dB |
 
 **Frequencies** are the classic adult-male means from Peterson & Barney
 (1952). Women and children run higher — roughly 850 / 1220 / 2810 for
@@ -172,10 +172,10 @@ spread is wide and method-dependent: about 50–140 Hz for B1, 62–149 for B2
 and 67–223 for B3 across studies, so 80 / 90 / 120 is a defensible middle
 rather than any one paper's number.
 
-**Levels are the part a parallel bank makes you choose.** They do not follow
-from the frequencies the way they would in a cascade — they are set. F1
-dominates in a low back vowel, so the higher formants are stepped down from
-it. These are a starting point for the ear, not a measurement.
+**Levels are fitted, not chosen** — see DEVIATION 2. A parallel bank makes
+you supply them, but that does not make them free: in a real tract they follow
+from the frequencies, and each vowel's pair is fitted to the all-pole cascade
+those formants imply.
 
 Measured peaks, from the running filter's impulse response: **728, 1100 and
 2452 Hz** — within 0.9 % of what was asked for. The error is the bilinear
@@ -187,11 +187,11 @@ the ~5 % that would start to read as a different vowel.
 Full-scale input, factory patch:
 
 ```
-  sine  110 Hz  ->  -29.13 dBFS        saw   82.4 Hz  ->  -12.44 dBFS
-  sine  220 Hz  ->  -23.80 dBFS        saw  110.0 Hz  ->  -12.87 dBFS
-  sine  730 Hz  ->   +0.05 dBFS        saw  146.8 Hz  ->  -11.60 dBFS
-  sine 1090 Hz  ->   -6.37 dBFS
-  sine 2440 Hz  ->  -11.72 dBFS
+  sine  110 Hz  ->  -31.97 dBFS        saw   82.4 Hz  ->  -12.07 dBFS
+  sine  220 Hz  ->  -26.70 dBFS        saw  110.0 Hz  ->  -12.37 dBFS
+  sine  730 Hz  ->   -0.04 dBFS        saw  146.8 Hz  ->  -11.23 dBFS
+  sine 1090 Hz  ->   -3.36 dBFS
+  sine 2440 Hz  ->  -23.80 dBFS
 ```
 
 The only case that reaches unity is a sine sitting **exactly** on F1, which is
@@ -327,18 +327,121 @@ buried the thing being measured. A Hann window kills the leakage; a sliding
 frame is what makes a click, whose energy is in one frame, stand out from a
 sweep, whose energy is spread over hundreds.
 
-### DEVIATION 2 — the levels are one shared profile, and that is a decision
+### DEVIATION 2 — the levels are DERIVED per vowel, and the first attempt was wrong twice
 
-All five presets carry the same 0 / −7 / −12 dB balance. Per-vowel levels were
-**tried and rejected**, and the rejection is the useful part.
+The levels in the table above are not chosen by ear. They are fitted, and the
+route to them is worth recording because two wrong answers came first.
 
-The attempt was to derive them the way a cascade synthesiser implies: build the
-all-pole cascade of the three resonances, evaluate its magnitude at each
-formant centre, and set the parallel bank's level so the peak heights match.
-That is principled, and it produces this:
+**Why they cannot be chosen freely.** A vocal tract, for non-nasal vowels, is
+an **all-pole** filter: its transfer function is completely determined by the
+pole positions, so formant amplitudes are a *consequence* of the frequencies
+and bandwidths. Klatt, crediting Fant (1956):
 
-| | A1 | A2 | A3 |
-|---|---|---|---|
+> "The advantage of the cascade connection is that the relative amplitudes of
+> formant peaks for vowels come out just right (Fant, 1956) without the need
+> for individual amplitude controls for each formant."
+
+A parallel bank — which this is — has thrown that mechanism away, so it needs
+the controls precisely because it can no longer derive them. Having the
+controls and giving all five vowels the same numbers is the worst of both.
+
+**Wrong answer 1: all five share one profile.** The table shipped 0 / −7 /
+−12 for every vowel, recorded here as a deliberate simplification. It was not
+defensible; it flattens a range F3 genuinely spans.
+
+**Wrong answer 2: a bare three-pole cascade.** The derivation that had been
+tried and rejected put F3 at −31 to −41 dB and was called inaudible. That was
+an artefact of the model, not physics: a real tract has poles **above** F3
+whose skirts hold the top end up, and truncating at three loses them. Adding
+higher poles at 3500 / 4500 / 5500 Hz — the uniform-tube series continued —
+moves /ɑ/'s F3 from −31 to −21 and /i/'s from −27 to −7.
+
+**The fit that is actually in the table.** For each vowel: build the all-pole
+cascade those formants imply, higher poles included; then find the A2 and A3
+that make *this* bank — these bandpasses, this polarity — match it best over
+100–4000 Hz. A1 is pinned at 0 dB.
+
+| | A2 | A3 | RMS fit | flat 0/−7/−12 gave |
+|---|---|---|---|---|
+| Aaaa | −3.3 | −26.8 | 4.16 dB | 6.73 dB |
+| Eeee | −8.0 | −2.3 | 4.22 | 5.62 |
+| Iiii | −8.2 | −7.6 | 4.23 | 4.62 |
+| Oooo | −7.4 | −34.6 → **−30.0** | 3.63 | 6.66 |
+| Uuuu | −10.2 | −37.3 → **−30.0** | 3.19 | 6.51 |
+
+F3 now spans 27.7 dB across the five, which is the point: **back and rounded
+vowels have a far weaker F3 than front vowels**, and the flat profile was
+giving Oooo and Uuuu about 16–20 dB too much of it. They were too bright.
+
+**A methodological trap on the way.** The first fit measured RMS error in dB
+with no floor, and its error surface came out jagged and non-monotonic — the
+"optimum" for A2 on the back vowels was a one-cell spike. The cause is that
+with an inverted F2 the sum has a genuine null, and dB error at a null is
+enormous and hypersensitive, so the metric was fitting the null's position
+rather than the spectral envelope. **Flooring both curves 40 dB below their
+peak** fixed it; the surfaces are smooth and monotonic now. If this is ever
+refitted, keep the floor.
+
+**Two honest limits.** The A3 fit is *shallow* for the back vowels — below
+about −28 dB, moving F3 by 6 dB changes the error by 0.05 dB, because a
+formant that far down barely affects the spectrum. Both are therefore set to
+−30 rather than their nominal optima: inside the flat region, and 10 dB clear
+of the Level parameter's own silence floor at −40, where a small nudge would
+switch F3 off altogether. And the residual ~4 dB RMS is a **floor**, not a
+failure: three bandpasses cannot reproduce an all-pole tract exactly, because
+the skirts are the wrong shape.
+
+**F1 is pinned at 0 dB in every vowel, deliberately.** The tract alone would
+make Eeee 11 dB quieter than Aaaa. That is real — open vowels are
+intrinsically louder — but a button that drops the mix 11 dB is not what
+anyone wants from an effect, and in speech the difference is smaller anyway
+because the glottal source varies too. This is a product decision, not
+physics, and it is the one place this model deliberately departs from the
+tract.
+
+### DEVIATION 3 — F2 is summed INVERTED
+
+`kFormantPolarity` is `{ +1, −1, +1 }`. Alternating signs is what a parallel
+formant synthesiser has always done, and it is not cosmetic.
+
+A bandpass runs from +90° below its centre to −90° above. Between F1 and F2
+the F1 branch is near −90° and the F2 branch near +90°, so **summed with the
+same sign they are half a turn apart and cancel**, digging a spurious deep
+null between the formants. An all-pole tract has no null there — it dips
+smoothly. Measured on the Aaa patch, the valley between F1 and F2:
+
+```
+  summed in phase   -20.4 dB below F1     <- a null the tract does not have
+  F2 inverted        -8.5 dB below F1     <- the tract's shape
+```
+
+Fitting the whole bank against the cascade, each configuration given its own
+best levels, over 100–4000 Hz with the 40 dB floor:
+
+| | all + | + − + |
+|---|---|---|
+| Aaaa | 5.56 | **4.16** |
+| Eeee | 4.29 | **4.22** |
+| Iiii | 4.64 | **4.23** |
+| Oooo | 6.28 | **3.63** |
+| Uuuu | 5.44 | **3.19** |
+
+Better for every vowel and by over 2 dB on the back vowels.
+
+The test for this looks at a **valley**, deliberately: dropping the polarity
+leaves every peak exactly where it is and moves only the regions between, so
+nothing else in the suite would notice. It also computes both candidate
+curves and requires the running filter to match the inverted one and not the
+in-phase one, rather than comparing against a threshold picked by hand.
+
+The first version of that test asserted the opposite — that inverting F2
+*deepened* the valley — and failed. The direction was settled by the
+measurement, and the comment that said otherwise is corrected in place.
+
+One consequence worth knowing: the polarity is part of the wet signal's phase,
+so it also changes how wet sums with dry at intermediate Dry/Wet settings.
+
+---|---|---|---|
 | Aaaa | 0.0 | −3.3 | **−30.9** |
 | Eeee | 0.0 | −16.9 | **−26.9** |
 | Iiii | 0.0 | −10.5 | **−19.3** |
@@ -510,7 +613,7 @@ c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-Thirty-six assertions, all passing. The ones worth knowing about:
+Forty assertions, all passing. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
@@ -522,8 +625,11 @@ Thirty-six assertions, all passing. The ones worth knowing about:
   must not be. A guard that has never failed is a guess.
 * **§8 drives every extreme of every range at four sample rates** with
   full-scale noise and requires the output to stay finite and bounded.
-* **§2b measures all five vowel presets** and checks no two are the same, that
-  every one has F1 < F2 < F3, and that the level profile really is shared.
+* **§2b measures all five vowel presets**, checks no two are the same, that
+  every one has F1 < F2 < F3, that F3's level spans more than 20 dB across
+  them, that F1 stays pinned at 0 dB, that nothing sits near the level floor,
+  and that the F1–F2 valley matches an inverted F2 rather than an in-phase
+  one.
 * **§8b is the glide requirement itself**: at five glide settings, every
   parameter that has to move arrives on the same sample, and that sample is
   the one the control asked for. It also proves the distances really differ

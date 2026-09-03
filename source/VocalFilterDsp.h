@@ -90,6 +90,32 @@ double bankMagnitude (const FormantSetting* formants, int count,
 
 constexpr int kFormantCount = 3;
 
+/** THE SIGN each formant is summed with. Alternating, which is what a
+    parallel formant synthesiser has always done, and it is not cosmetic.
+ *
+ *  Three bandpasses summed in phase get the PEAKS right and the regions
+ *  BETWEEN them wrong. A bandpass runs from +90 degrees below its centre
+ *  to -90 above, so between F1 and F2 the F1 branch is near -90 and the F2
+ *  branch near +90: summed with the SAME sign they are half a turn apart
+ *  and CANCEL, putting a spurious deep null between the formants. An
+ *  all-pole tract has no null there - it dips smoothly - and inverting F2
+ *  is what removes it. Measured on the Aaa patch, the valley between F1
+ *  and F2 is -20.4 dB summed in phase and -8.5 dB inverted; the second is
+ *  the tract's shape. Fitting this bank against the
+ *  all-pole cascade the same formants imply, over 100-4000 Hz with a 40 dB
+ *  floor, each configuration given its own best levels:
+ *
+ *      vowel     all +      + - +
+ *      Aaaa       5.56       4.16      RMS dB error
+ *      Eeee       4.29       4.22
+ *      Iiii       4.64       4.23
+ *      Oooo       6.28       3.63
+ *      Uuuu       5.44       3.19
+ *
+ *  Better for every vowel, and by over 2 dB on the back vowels. See
+ *  PORTING-NOTES DEVIATION 3. */
+constexpr double kFormantPolarity[kFormantCount] = { 1.0, -1.0, 1.0 };
+
 /** The output trim. Top of travel is unity; for a port, make it the
     ORIGINAL's gain staging and set the default 20 dB below it. */
 constexpr double kTrimMinDb     = -60.0;
@@ -155,8 +181,8 @@ constexpr double kGlideFloorMs   =   20.0;
 constexpr FormantSetting kAaaFormants[kFormantCount] =
 {
 	{  730.0,  80.0,   0.0 },   // F1
-	{ 1090.0,  90.0,  -7.0 },   // F2
-	{ 2440.0, 120.0, -12.0 },   // F3
+	{ 1090.0,  90.0,  -3.3 },   // F2
+	{ 2440.0, 120.0, -26.8 },   // F3
 };
 
 //------------------------------------------------------------------------
@@ -174,15 +200,24 @@ constexpr FormantSetting kAaaFormants[kFormantCount] =
  *  vowels - /i/ and /u/ - because bandwidth rises with formant frequency
  *  and those two have the lowest F1 of the set.
  *
- *  LEVELS are the same profile for all five, and that is a DECISION, not
- *  an oversight. See PORTING-NOTES section 2: deriving them from a
- *  three-pole cascade was tried and rejected - it puts F3 between -31 and
- *  -41 dB, which is inaudible, because a bare cascade of unity-DC
- *  resonators has neither the source's spectral tilt nor a higher-pole
- *  correction. There is no published parallel-bank amplitude table that
- *  covers these five, so rather than invent one dressed up as a
- *  measurement, every button recalls the same balance and the Level
- *  sliders are where you shape it. */
+ *  LEVELS ARE DERIVED, not chosen. A vocal tract is an all-pole filter,
+ *  so its formant amplitudes are a CONSEQUENCE of the frequencies and
+ *  bandwidths, not free parameters - which is exactly why a cascade
+ *  synthesiser needs no amplitude controls and a parallel one, like this,
+ *  cannot do without them (Klatt 1980, after Fant 1956).
+ *
+ *  Each pair below is fitted: build the all-pole cascade these formants
+ *  imply, including higher poles at 3500/4500/5500 Hz for the ones a
+ *  three-formant model leaves out, then find the A2 and A3 that make THIS
+ *  bank - these bandpasses, this polarity - match it best over
+ *  100-4000 Hz. A1 is pinned at 0 dB, which keeps the five vowels at
+ *  roughly equal loudness; the tract alone would make Eeee 11 dB quieter
+ *  than Aaaa, and a button that drops the mix 11 dB is not what anyone
+ *  wants from an effect.
+ *
+ *  An earlier version of this table gave all five the same 0 / -7 / -12
+ *  and called it a decision. It was a mistake, and PORTING-NOTES
+ *  DEVIATION 2 records how it was found. */
 struct VowelPreset
 {
 	const char* name;       // what the button says
@@ -198,18 +233,25 @@ constexpr VowelPreset kVowels[kVowelCount] =
 	  { kAaaFormants[0], kAaaFormants[1], kAaaFormants[2] } },
 
 	{ "Eeee", "/i/ as in beet",
-	  { {  270.0,  50.0,   0.0 }, { 2290.0, 100.0,  -7.0 }, { 3010.0, 140.0, -12.0 } } },
+	  { {  270.0,  50.0,   0.0 }, { 2290.0, 100.0,  -8.0 }, { 3010.0, 140.0,  -2.3 } } },
 
 	{ "Iiii", "/I/ as in bit",
-	  { {  390.0,  60.0,   0.0 }, { 1990.0, 100.0,  -7.0 }, { 2550.0, 130.0, -12.0 } } },
+	  { {  390.0,  60.0,   0.0 }, { 1990.0, 100.0,  -8.2 }, { 2550.0, 130.0,  -7.6 } } },
 
 	// NOT Peterson & Barney: /ou/ is a diphthong and they measured only
 	// monophthongs. This is the common /o/ set.
+	//
+	// F3 for the two back vowels fits at -34.6 and -37.3, but the fit is
+	// FLAT below about -28 dB - F3 that far down barely affects the
+	// spectrum, so moving it 6 dB changes the error by 0.05 dB. Both are
+	// set to -30 instead: inside the flat region, and 10 dB clear of the
+	// Level parameter's own silence floor at -40, where a small nudge
+	// would switch F3 off altogether.
 	{ "Oooo", "/o/ as in boat",
-	  { {  450.0,  60.0,   0.0 }, {  900.0,  90.0,  -7.0 }, { 2400.0, 120.0, -12.0 } } },
+	  { {  450.0,  60.0,   0.0 }, {  900.0,  90.0,  -7.4 }, { 2400.0, 120.0, -30.0 } } },
 
 	{ "Uuuu", "/u/ as in boot",
-	  { {  300.0,  50.0,   0.0 }, {  870.0,  90.0,  -7.0 }, { 2240.0, 120.0, -12.0 } } },
+	  { {  300.0,  50.0,   0.0 }, {  870.0,  90.0, -10.2 }, { 2240.0, 120.0, -30.0 } } },
 };
 
 constexpr double kMixDefault = 100.0;   // fully wet: the model, not a colour

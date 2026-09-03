@@ -129,8 +129,8 @@ for c, head in enumerate(('F1', 'F2', 'F3')):
 
 # the grid, showing the Aaa patch
 AAA = [('730 Hz', '80 Hz', '0.0 dB'),
-       ('1090 Hz', '90 Hz', '-7.0 dB'),
-       ('2440 Hz', '120 Hz', '-12.0 dB')]
+       ('1090 Hz', '90 Hz', '-3.3 dB'),
+       ('2440 Hz', '120 Hz', '-26.8 dB')]
 for c in range(3):
     for r, lab in enumerate(('Freq', 'Width', 'Level')):
         x0, y0, x1, y1 = cell(c, r)
