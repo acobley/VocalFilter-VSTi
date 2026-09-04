@@ -1,93 +1,163 @@
-# VST3 / AUv2 porting template
+# VocalFilter
 
-The build system from the SpaceDub DXi→VST3 port, with the plug-in taken out
-of it. Copy this folder, edit one block, and you have a VST3 and an Audio Unit
-building on macOS — without rediscovering the SDK fetching, the AudioUnitSDK
-version pin, the code-signing workaround or the `CMAKE_MODULE_PATH` trap.
+A three-formant vocal-tract model as a **VST3 and Audio Unit** effect for
+macOS. Stereo in, stereo out. Feed it anything with harmonics and it puts a
+vowel on it.
 
-**`PORTING-GUIDE.md` next to this file is the other half**: how to get a DXi's
-DSP, parameters and dialog across. Read that first; this file is only about
-getting something to build.
+![The VocalFilter panel](docs/panel-vowel.png)
 
-**`PORT-CHECKLIST.md`** is the working copy — six phases, tickable, with the
-decisions to record at the top and the guide's section numbers against each
-step. It comes with the template, so a fresh copy already has one.
+*(A layout render from `tools/render-panel.py`, not a screenshot — it is
+generated from the editor's own layout constants so it cannot drift from the
+code.)*
 
-## Using it
+## What it does
 
-```sh
-cp -R vst3-port-template ~/DXi-DEv/MyPlugin-VSTi
-cd ~/DXi-DEv/MyPlugin-VSTi
+On each channel, three bandpass resonators in **parallel**, summed, mixed
+against the dry signal and trimmed:
+
+```
+in --+--> BP(F1) * A1 --+
+     +--> BP(F2) * -A2 -+--> wet --+--> mix --> trim --> out
+     +--> BP(F3) * A3 --+          |
+     +--------- dry ---------------+
 ```
 
-Then:
+Parallel rather than cascaded because a parallel bank lets each formant carry
+its own amplitude, which is the point of dialling a vowel by hand. F2 is
+summed **inverted**: three bandpasses added in phase cancel between the peaks
+and dig a null a real tract does not have.
 
-1. **Edit the `PLUG-IN IDENTITY` block** at the top of `CMakeLists.txt` — name,
-   version, description, company, and the two bundle identifiers. Nothing else
-   in that file needs changing.
-2. **Edit `resource/au-info.plist`** — every `<string>` marked `CHANGE ME`,
-   in particular the three four-character codes. Skip this if you pass
-   `--no-au`.
-3. **Put your sources in `source/`** and your artwork in `resource/`. Both are
-   globbed, so there is no file list to maintain.
-4. Build:
+The filters are RBJ constant-0 dB-peak bandpasses, so a formant's Level is its
+level and the Width control is not secretly a second gain.
+
+## The five vowels
+
+One button each, and a **Vowel** parameter the host can automate.
+
+| | Sound | F1 | F2 | F3 | B1 | B2 | B3 | A1 | A2 | A3 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Aaaa | /ɑ/ *father* | 730 | 1090 | 2440 | 80 | 90 | 120 | 0 | −3.3 | −26.8 |
+| Eeee | /i/ *beet* | 270 | 2290 | 3010 | 50 | 100 | 140 | 0 | −8.0 | −2.3 |
+| Iiii | /ɪ/ *bit* | 390 | 1990 | 2550 | 60 | 100 | 130 | 0 | −8.2 | −7.6 |
+| Oooo | /o/ *boat* | 450 | 900 | 2400 | 60 | 90 | 120 | 0 | −7.4 | −30.0 |
+| Uuuu | /u/ *boot* | 300 | 870 | 2240 | 50 | 90 | 120 | 0 | −10.2 | −30.0 |
+
+Frequencies in Hz are the classic adult-male means from **Peterson & Barney
+(1952)**, so all five sit in one consistent voice. The exception is Oooo: the
+letter O names a diphthong, /oʊ/, which they did not measure, so that row
+carries the common /o/ set and is marked as such in the source.
+
+Bandwidths sit mid-range of the measured adult spread, narrower at B1 for the
+close vowels.
+
+**Levels are derived, not chosen.** A vocal tract is an all-pole filter, so
+formant amplitudes are a consequence of the frequencies rather than free
+parameters — which is why a cascade synthesiser needs no amplitude controls
+and a parallel one cannot do without them. Each pair is fitted against the
+all-pole cascade those formants imply. `PORTING-NOTES.md` §2 has the method,
+the numbers and the two wrong answers that came first.
+
+## Controls
+
+| Parameter | Range | Default |
+|---|---|---|
+| F1 / F2 / F3 **Freq** | 200–1200, 500–3000, 1500–4000 Hz | the Aaa patch |
+| F1 / F2 / F3 **Width** | 20–400 Hz | 80 / 90 / 120 |
+| F1 / F2 / F3 **Level** | −40 … +12 dB | 0 / −3.3 / −26.8 |
+| **Dry / Wet** | 0–100 % | 100 |
+| **Glide** | 0–2000 ms | 150 |
+| **Output Trim** | −60 … 0 dB | 0 |
+| **Vowel** | Manual, Aaaa, Eeee, Iiii, Oooo, Uuuu | Manual |
+
+**Glide** is how long a formant takes to reach a new value. It is a timed
+linear ramp, one length for all nine parameters, so however far each has to
+travel they all arrive on the same sample. 150 ms by default because that is
+roughly what a diphthong glide takes in speech. Zero is floored at 20 ms — an
+instant jump of F2 from 870 Hz to 2290 Hz is a click.
+
+**Vowel** is a mode. While it is on a preset the DSP uses that vowel's values
+and the nine formant parameters are ignored; touching a slider on the panel
+captures the preset's values and switches back to Manual, so nothing jumps.
+
+The display draws each formant's response — F1 yellow, F2 green, F3 blue — and
+the summed response in white, following the DSP in real time as it glides.
+
+## Building
+
+macOS, Xcode and CMake 3.25+.
 
 ```sh
+git clone https://github.com/acobley/VocalFilter-VSTi.git
+cd VocalFilter-VSTi
 ./setup-xcode.sh
 ```
 
-The first configure clones the VST3 SDK (~250 MB) into `external/`, so it
-takes a few minutes; later ones reuse it. `./setup-xcode.sh --help` lists the
-options — `--no-au`, `--no-validator`, `--makefiles`, `--clean`.
-
-## What you must supply
-
-The template builds nothing on its own; `source/` is empty. A minimal VST3
-needs:
-
-| File | What it is |
-|---|---|
-| `<Name>IDs.h` | freshly generated class UIDs — **never change once shipped** |
-| `<Name>Params.*` | the parameter table (guide §4) |
-| `<Name>Processor.*` | `AudioEffect` — the DSP and `process()` |
-| `<Name>Controller.*` | `EditControllerEx1` — parameters and host plumbing |
-| `<Name>Entry.cpp` | the plug-in factory |
-| `<Name>Editor.*` | the window, if it has one |
-| `version.h` | version strings |
-
-`../Spaceduo-VSTi/source/` is a complete worked example of all seven.
-
-## Two things that are deliberate
-
-**Sources are globbed with `CONFIGURE_DEPENDS`,** so there is no file list to
-maintain — at the cost of one wrinkle under the Xcode generator: the first
-build after you *add* a source file regenerates the project mid-build and
-compiles the old file list anyway. It shows up as the SDK post-build check
-saying *"Bundle does not export the required 'GetPluginFactory' function"*.
-A PRE_BUILD check catches this: it compares `source/` against the list
-recorded when the project was generated and stops the build naming what
-changed. Re-run `./setup-xcode.sh --no-open` and build again. Guide §7 has
-the detail.
-
-**Cache options are prefixed `PORT_`,** not the plug-in's name:
-`-DPORT_BUILD_AU=OFF`, `-DPORT_CODE_SIGN_IDENTITY=...`,
-`-DPORT_AU_SDK_TAG=...`. That way the template needs no editing beyond the
-identity block. Rename them if you prefer, but rename them in
-`setup-xcode.sh` too.
-
-**`setup-xcode.sh` reads the plug-in name out of `CMakeLists.txt`** rather
-than keeping its own copy, so there is exactly one place the name lives.
-
-## Signing
-
-Both bundles are ad-hoc signed automatically, which needs no Apple developer
-certificate and is enough for macOS to load them, Apple Silicon included. To
-sign properly:
+The first configure clones the Steinberg VST3 SDK (~250 MB) into `external/`,
+which takes a few minutes; later ones reuse it. To use a checkout you already
+have:
 
 ```sh
-cmake -B build -G Xcode -DPORT_CODE_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+VST3_SDK_ROOT=/path/to/vst3sdk ./setup-xcode.sh
 ```
 
-`security find-identity -v -p codesigning` lists what you have. The reasoning
-behind not leaving this to the SDK is in the `CMakeLists.txt` comments and in
-guide §9.
+`./setup-xcode.sh --help` lists the rest — `--no-open`, `--makefiles`,
+`--no-au`, `--no-validator`, `--clean`.
+
+Both bundles are ad-hoc signed automatically, which is enough for macOS to
+load them, Apple Silicon included. Before shipping, run Steinberg's validator
+and `auval -v aufx VcFl AECo`.
+
+> **If you add a source file**, re-run `./setup-xcode.sh --no-open` before
+> building. Sources are globbed with `CONFIGURE_DEPENDS`, and under the Xcode
+> generator the first build after a file is added compiles the old file list
+> anyway; a PRE_BUILD check catches it and names what changed.
+
+## Tests
+
+The DSP is deliberately free of SDK types, so the suite compiles and runs
+standalone — no host, no SDK, no build system:
+
+```sh
+c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
+    -o /tmp/dsptests && /tmp/dsptests
+```
+
+47 assertions. They measure rather than assume: where the formant peaks
+actually land, that the running filter matches the curve the display draws,
+that the −3 dB width is the width that was asked for, that the response is
+unchanged from 44.1 k to 192 k, that every glide setting lands on the right
+sample, and that the fastest legal glide is 30 dB quieter at 6–12 kHz than an
+instant jump. Several include a negative control, because a guard that has
+never failed is a guess.
+
+## Repository layout
+
+| | |
+|---|---|
+| `source/` | the plug-in — `VocalFilterDsp.*` is the audio line and includes no SDK header |
+| `tests/` | the SDK-free DSP suite |
+| `tools/render-panel.py` | renders the editor layout to `docs/`, parsing the constants out of the headers |
+| `docs/` | those renders |
+| `resource/au-info.plist` | the Audio Unit's identity |
+| **`PORTING-NOTES.md`** | **the engineering record** — every decision, the measurement behind it, and the things that turned out wrong |
+| `PORTING-GUIDE.md`, `PORT-CHECKLIST.md` | inherited from the DXi→VST3 template this was scaffolded from |
+
+VocalFilter is **not a port of anything** — there is no DXi behind it. It was
+built on the build system from the SpaceDub, ForTran and SpyBand ports, which
+is why the porting guide and checklist are along for the ride. The custom
+VSTGUI controls are lifted from the SpyBand port, with the class names kept so
+the two copies can still be diffed.
+
+## Identity
+
+Bundle ids `audio.vocalfilter.vst3` and `audio.vocalfilter.audiounit`; Audio
+Unit type/subtype/manufacturer `aufx` / `VcFl` / `AECo`. Along with the class
+UIDs in `source/VocalFilterIDs.h`, these are permanent once a build has
+shipped — change one and every existing session loses the plug-in.
+
+---
+
+Copyright 2026 A. E. Cobley. No licence is declared yet; add a `LICENSE` file
+before sharing this expecting anyone else to reuse it.
+
+VST is a trademark of Steinberg Media Technologies GmbH.
