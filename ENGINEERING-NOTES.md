@@ -652,7 +652,8 @@ squeezes F1 and F2 — the two that decide which vowel you hear — into a
 thumbnail.
 
 **The curves come from `bandpassMagnitude()`**, the same function the DSP's
-coefficients come from. That is the guide's shared-function rule, and it is
+coefficients come from. Anything the editor displays that the DSP also
+computes must come from one shared function, and that is
 the whole reason the display can be trusted: a private copy of the response
 maths here would agree with the filter today and diverge at some sample rate
 nobody tests.
@@ -674,7 +675,7 @@ have to cross from the processor to the controller — two separate components.
 **Nine read-only hidden parameters**, ids 13–21, mirroring the nine formant
 fields with identical ranges so `paramDef()` converts them back with no
 second table. The processor writes them through
-`data.outputParameterChanges`. This is the guide's documented route and the
+`data.outputParameterChanges`. This is VST3's documented route for it, and the
 reason it is not a message is that **a message sent from `process()` is
 silently discarded** by the host's connection proxy — it returns success and
 does nothing.
