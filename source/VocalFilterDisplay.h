@@ -12,8 +12,9 @@
 // this plug-in; this view knows what a formant is.
 //
 // THE CURVES COME FROM bandpassMagnitude(), the same function the DSP's
-// coefficients come from. That is the porting guide's rule about a shared
-// static function, and it is the whole reason this display can be trusted:
+// coefficients come from. Anything the editor displays that the DSP also
+// computes must come from ONE shared function, and that is the whole
+// reason this display can be trusted:
 // a private copy of the response maths here would agree with the filter
 // today and diverge at some sample rate nobody tests.
 //------------------------------------------------------------------------

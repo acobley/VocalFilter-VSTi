@@ -261,10 +261,11 @@ file(GLOB plugin_sources
     "${CMAKE_CURRENT_SOURCE_DIR}/source/*.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/source/*.cpp"
 )
-# Docs, listed so they appear in the Xcode project. Conditional because a
-# fresh copy of the template has no PORTING-NOTES.md yet, and CMake treats a
-# listed file that does not exist as a hard error.
-foreach(_doc README.md PORTING-NOTES.md PORTING-GUIDE.md PORT-CHECKLIST.md)
+# Docs, listed so they appear in the Xcode project. Conditional because
+# CMake treats a listed file that does not exist as a hard error, and which
+# of these a project has varies - a port keeps the template's PORTING-GUIDE
+# and PORT-CHECKLIST, this one does not.
+foreach(_doc README.md ENGINEERING-NOTES.md PORTING-NOTES.md PORTING-GUIDE.md PORT-CHECKLIST.md)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_doc}")
         list(APPEND plugin_sources "${_doc}")
     endif()

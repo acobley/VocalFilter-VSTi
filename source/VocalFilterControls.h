@@ -67,8 +67,7 @@ VSTGUI::CFontRef panelFont ();
     control. Six of the DXi's labels are wider than the control they name -
     "Unvoiced Noise Level" wants 95 pixels and has 82 - and DT_WORDBREAK
     wrapped them into an 11-pixel band, which clipped the second line.
-    Dropping a size instead is the porting guide's advice and it is what
-    these are for. */
+    Dropping a size instead is what these are for. */
 VSTGUI::CFontRef panelFontSmall ();
 VSTGUI::CFontRef panelFontTiny ();
 
@@ -170,7 +169,7 @@ private:
     NOT the DXi, which had no click behaviour at all: its vertical mode
     needed the pointer to move 25 pixels before it did anything, on a
     control 18 pixels tall, so the control read as dead until you happened
-    to drag it. See PORTING-NOTES section 3.
+    to drag it. See ENGINEERING-NOTES section 3.
 
     The drag is still there and still works the original's way round -
     DOWN ADVANCES, because the DXi decremented a counter it then reported

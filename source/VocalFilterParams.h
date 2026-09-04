@@ -15,7 +15,7 @@
 //
 // There is no DXi behind this plug-in yet, so for the one parameter below
 // internal == plain. Say so when you add the real ones, and mark every
-// departure from the original table as a DEVIATION in PORTING-NOTES.md.
+// departure from the original table as a DEVIATION in ENGINEERING-NOTES.md.
 //
 // APPEND NEW PARAMETERS, NEVER INSERT. An id that moves loads a saved
 // project's value into the wrong control.
@@ -75,8 +75,8 @@ enum Param : Steinberg::Vst::ParamID
 	// response display. Read-only and hidden, so no host shows them and
 	// nothing outside the plug-in can write them.
 	//
-	// This is the porting guide's route for a per-block value travelling
-	// from the processor to the controller, and the reason it is not a
+	// This is the route a per-block value takes from the processor to the
+	// controller, and the reason it is not a
 	// message is that a message sent from process() is silently discarded
 	// by the host's connection proxy - it returns success and does
 	// nothing. data.outputParameterChanges is the mechanism that works.

@@ -1,8 +1,11 @@
-# VocalFilter — porting notes
+# VocalFilter — engineering notes
 
 The deliverable that outlives the session. Record the **symptom**, the
 **measurement** and the **decision** — not just the change. When a
 measurement here turns out to be wrong, correct it in place and say so.
+
+*(This file is `PORTING-NOTES.md` in the DXi ports that share this build
+system. Nothing here was ported, so it is named for what it actually is.)*
 
 ---
 
@@ -20,7 +23,7 @@ summed, mixed against the dry signal and trimmed.
 | Sample formats | 32- and 64-bit accepted | the line is float, as these plug-ins were; a 64-bit host is converted through `mScratchIn/Out` rather than refused |
 | Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
 | Parameters | thirteen settings, plus nine read-only hidden values the processor publishes for the display | sections 2 and 4b |
-| Editor | **Yes** | the silent shell was validated first — guide step 6 — and the panel came afterwards |
+| Editor | **Yes** | a silent processor-and-controller shell was got validating first, while there was little code to search; the panel came afterwards |
 | Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand, plus `SpyPresetButton` | section 4 |
 | Vowel presets | five — A E I O U — reached from the panel or from a host-automatable **Vowel** parameter | sections 2 and 2c |
 | Vowel transitions | a timed **linear ramp**, one length for all nine, so they arrive together | section 2b |

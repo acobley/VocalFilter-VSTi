@@ -58,7 +58,7 @@ close vowels.
 formant amplitudes are a consequence of the frequencies rather than free
 parameters — which is why a cascade synthesiser needs no amplitude controls
 and a parallel one cannot do without them. Each pair is fitted against the
-all-pole cascade those formants imply. `PORTING-NOTES.md` §2 has the method,
+all-pole cascade those formants imply. `ENGINEERING-NOTES.md` §2 has the method,
 the numbers and the two wrong answers that came first.
 
 ## Controls
@@ -143,12 +143,13 @@ never failed is a guess.
 | `tools/render-panel.py` | renders the editor layout to `docs/`, parsing the constants out of the headers |
 | `docs/` | those renders, and the signal-path diagram — `docs/README.md` says how each is regenerated |
 | `resource/au-info.plist` | the Audio Unit's identity |
-| **`PORTING-NOTES.md`** | **the engineering record** — every decision, the measurement behind it, and the things that turned out wrong |
-| `PORTING-GUIDE.md`, `PORT-CHECKLIST.md` | inherited from the DXi→VST3 template this was scaffolded from |
+| **`ENGINEERING-NOTES.md`** | **the engineering record** — every decision, the measurement behind it, and the things that turned out wrong |
 
 VocalFilter is **not a port of anything** — there is no DXi behind it. It was
-built on the build system from the SpaceDub, ForTran and SpyBand ports, which
-is why the porting guide and checklist are along for the ride. The custom
+scaffolded from the build system the SpaceDub, ForTran and SpyBand DXi→VST3
+ports share, which is where `CMakeLists.txt` and `setup-xcode.sh` come from;
+the porting guide and checklist that template also carries have been removed,
+because nothing here was ported and they only described how to. The custom
 VSTGUI controls are lifted from the SpyBand port, with the class names kept so
 the two copies can still be diffed.
 

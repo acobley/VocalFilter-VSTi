@@ -5,7 +5,7 @@
 // so the DSP's idea of what a formant may be and the host's idea cannot
 // drift apart. The factory patch is kAaaFormants - the vowel /a/ as in
 // "father"; the numbers, their sources and why the levels are a choice
-// rather than a consequence are in that header and in PORTING-NOTES
+// rather than a consequence are in that header and in ENGINEERING-NOTES
 // section 2.
 //
 // The formants are numbered F1..F3 on the panel and in the host, the way

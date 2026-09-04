@@ -18,7 +18,7 @@
 //          +--------- dry -------------------+
 //
 // DELIBERATELY FREE OF SDK TYPES. Nothing in this file or its .cpp may
-// include a VST3 header. Two reasons, both from the porting guide:
+// include a VST3 header. Two reasons:
 //
 //   * it compiles and runs standalone with plain `c++ -std=c++17`, so the
 //     numbers it produces can be tested for real - tests/DspTests.cpp
@@ -113,7 +113,7 @@ constexpr int kFormantCount = 3;
  *      Uuuu       5.44       3.19
  *
  *  Better for every vowel, and by over 2 dB on the back vowels. See
- *  PORTING-NOTES DEVIATION 3. */
+ *  ENGINEERING-NOTES DEVIATION 3. */
 constexpr double kFormantPolarity[kFormantCount] = { 1.0, -1.0, 1.0 };
 
 /** The output trim. Top of travel is unity; for a port, make it the
@@ -216,7 +216,7 @@ constexpr FormantSetting kAaaFormants[kFormantCount] =
  *  wants from an effect.
  *
  *  An earlier version of this table gave all five the same 0 / -7 / -12
- *  and called it a decision. It was a mistake, and PORTING-NOTES
+ *  and called it a decision. It was a mistake, and ENGINEERING-NOTES
  *  DEVIATION 2 records how it was found. */
 struct VowelPreset
 {
