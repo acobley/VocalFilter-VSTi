@@ -28,5 +28,5 @@
 #define stringFileDescription "VocalFilter VST3"
 #endif
 #define stringCompanyName    "A. E. Cobley"
-#define stringLegalCopyright "Copyright 2026 A. E. Cobley"
+#define stringLegalCopyright "Copyright 2026 A. E. Cobley - CC BY-SA 4.0"
 #define stringLegalTrademarks "VST is a trademark of Steinberg Media Technologies GmbH"
