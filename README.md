@@ -27,6 +27,10 @@ its own amplitude, which is the point of dialling a vowel by hand. F2 is
 summed **inverted**: three bandpasses added in phase cancel between the peaks
 and dig a null a real tract does not have.
 
+[`docs/signal-path.png`](docs/signal-path.png) draws the whole thing —
+including how the vowel selector and the glide reach the filters, and how the
+display gets the values it draws.
+
 The filters are RBJ constant-0 dB-peak bandpasses, so a formant's Level is its
 level and the Width control is not secretly a second gain.
 
@@ -137,7 +141,7 @@ never failed is a guess.
 | `source/` | the plug-in — `VocalFilterDsp.*` is the audio line and includes no SDK header |
 | `tests/` | the SDK-free DSP suite |
 | `tools/render-panel.py` | renders the editor layout to `docs/`, parsing the constants out of the headers |
-| `docs/` | those renders |
+| `docs/` | those renders, and the signal-path diagram — `docs/README.md` says how each is regenerated |
 | `resource/au-info.plist` | the Audio Unit's identity |
 | **`PORTING-NOTES.md`** | **the engineering record** — every decision, the measurement behind it, and the things that turned out wrong |
 | `PORTING-GUIDE.md`, `PORT-CHECKLIST.md` | inherited from the DXi→VST3 template this was scaffolded from |
