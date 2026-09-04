@@ -108,10 +108,10 @@ the two partly cancel. **The dip between two formants is where it is because
 of the phase between them.** Summing magnitudes puts it in the wrong place
 and makes it far too shallow.
 
-With the complex sum the same test reads **4.29e-09**. This is the porting
-guide's warning about a suite that compared only magnitudes while the
-transcription quietly computed phases nobody looked at — the same trap, found
-by writing the test first.
+With the complex sum the same test reads **4.29e-09**. It is the classic
+version of this trap — a suite that compares only magnitudes while the code
+under it quietly computes phases nobody ever looks at — and it was caught here
+only because the test was written before the function it checks.
 
 ---
 

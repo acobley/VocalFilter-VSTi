@@ -421,11 +421,11 @@ int main ()
 	section ("3. The filter that RUNS is the filter the editor would DRAW");
 	//--------------------------------------------------------------------
 	{
-		// The guide's rule that anything the editor displays and the DSP
-		// computes must come from one shared function is only worth
-		// anything if the shared function is actually right. This
-		// compares the measured impulse response against
-		// bandpassMagnitude() across the audible band.
+		// Anything the editor displays and the DSP computes must come from
+		// ONE shared function - but that rule is only worth anything if
+		// the shared function is actually right. This compares the
+		// measured impulse response against bandpassMagnitude() across
+		// the audible band.
 		Dsp dsp;
 		dsp.setSampleRate (kRate);
 		applyPatch (dsp, kAaaFormants);
