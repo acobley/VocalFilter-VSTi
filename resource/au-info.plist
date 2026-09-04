@@ -16,8 +16,8 @@
 	header.
 
 	  type          aufx = audio effect,  aumu = instrument,  aumf = effect
-	                with MIDI in. Most DXi ports are aufx even when the DXi
-	                registered itself as a synth - see the porting guide.
+	                with MIDI in. VocalFilter is aufx: it reads its input
+	                buffer and nothing reads a MIDI queue.
 	  subtype       four characters identifying this plug-in
 	  manufacturer  four characters identifying you. Apple reserves
 	                all-lowercase codes for itself, so keep a capital.
