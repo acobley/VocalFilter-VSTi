@@ -1,0 +1,191 @@
+<title>VocalFilter signal path</title>
+<style>
+  body { margin: 0; background: #f7f7f5; color: #1a1a1a;
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+  .page { width: 1240px; margin: 0 auto; padding: 28px 0 40px; }
+  h1 { font-size: 21px; margin: 0 0 2px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { color: #6b6b66; margin: 0 0 14px; font-size: 13px; }
+  .notes { margin: 22px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+  .notes h2 { font-size: 12.5px; margin: 0 0 5px; letter-spacing: 0.03em; text-transform: uppercase; color: #6b6b66; font-weight: 650; }
+  .notes p { margin: 0 0 8px; font-size: 13px; color: #2c2c2a; }
+  code { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; background: #ececE8; padding: 1px 4px; border-radius: 3px; }
+</style>
+
+<div class="page">
+<h1>VocalFilter — signal path</h1>
+<p class="sub">Three bandpass resonators in parallel per channel. Drawn from <code>Dsp::process</code> and <code>VocalFilterProcessor::pushParameters</code>. The two channels are identical and share coefficients; only their filter state differs, so one is drawn.</p>
+
+<svg viewBox="0 0 1240 720" width="1240" height="720" role="img"
+     aria-label="Signal flow diagram. A control plane along the top takes either the vowel preset table or the nine formant parameters, selected by the Vowel mode, through glide ramps into biquad coefficients, which feed a parallel bank of three bandpass filters. The audio input splits into that bank and a dry path; the bank's three outputs are scaled and summed, with F2 inverted, then crossfaded against dry and scaled by output trim. A dashed tap carries the live formant values out through read-only parameters to the controller and the response display.">
+  <defs>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#2f6296"/>
+    </marker>
+    <marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#8a6410"/>
+    </marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#3f7040"/>
+    </marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,1 L9,5 L0,9 z" fill="#8b8b82"/>
+    </marker>
+    <style>
+      .bx   { rx: 7; ry: 7; stroke-width: 1.4; }
+      .aud  { fill: #e4eef9; stroke: #2f6296; }
+      .ctl  { fill: #faf0d8; stroke: #8a6410; }
+      .obs  { fill: #f0f0ed; stroke: #8b8b82; }
+      .neu  { fill: #ededea; stroke: #6f6f68; }
+      .out  { fill: #e6efe6; stroke: #3f7040; }
+      .bank { fill: #f2f7fc; stroke: #9fb8d0; stroke-width: 1.2; stroke-dasharray: 5 4; rx: 10; ry: 10; }
+      .t    { font: 600 13.5px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #16161a; }
+      .s    { font: 11.5px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #5e5e58; }
+      .lane { font: 700 12px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; letter-spacing: .09em; }
+      .note { font: italic 11.5px -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #74746c; }
+      .wa   { fill: none; stroke: #2f6296; stroke-width: 1.9; }
+      .wc   { fill: none; stroke: #8a6410; stroke-width: 1.7; }
+      .wo   { fill: none; stroke: #3f7040; stroke-width: 1.9; }
+      .tap  { fill: none; stroke: #8b8b82; stroke-width: 1.4; stroke-dasharray: 3 3; }
+    </style>
+  </defs>
+
+  <!-- ==================== CONTROL PLANE ==================== -->
+  <text class="lane" x="30" y="38" fill="#8a6410">CONTROL — what the filters are told to be</text>
+
+  <rect class="bx ctl" x="30" y="58" width="175" height="46"/>
+  <text class="t" x="117" y="78" text-anchor="middle">Vowel table</text>
+  <text class="s" x="117" y="94" text-anchor="middle">Aaaa Eeee Iiii Oooo Uuuu</text>
+
+  <rect class="bx ctl" x="30" y="118" width="175" height="46"/>
+  <text class="t" x="117" y="138" text-anchor="middle">Nine parameters</text>
+  <text class="s" x="117" y="154" text-anchor="middle">F1–F3 freq / width / level</text>
+
+  <rect class="bx ctl" x="240" y="88" width="155" height="46"/>
+  <text class="t" x="317" y="108" text-anchor="middle">Vowel</text>
+  <text class="s" x="317" y="124" text-anchor="middle">a MODE, not a recall</text>
+  <path class="wc" d="M205,81 H222 V104 H240" marker-end="url(#ac)"/>
+  <path class="wc" d="M205,141 H222 V118 H240" marker-end="url(#ac)"/>
+  <text class="note" x="317" y="152" text-anchor="middle">on a preset, the nine are ignored</text>
+
+  <rect class="bx ctl" x="430" y="88" width="200" height="46"/>
+  <text class="t" x="530" y="108" text-anchor="middle">Glide ramps</text>
+  <text class="s" x="530" y="124" text-anchor="middle">nine, one length, 0–2000 ms</text>
+  <path class="wc" d="M395,111 H430" marker-end="url(#ac)"/>
+  <text class="note" x="530" y="152" text-anchor="middle">so they all arrive on the same sample</text>
+
+  <rect class="bx ctl" x="665" y="88" width="210" height="46"/>
+  <text class="t" x="770" y="108" text-anchor="middle">Biquad coefficients</text>
+  <text class="s" x="770" y="124" text-anchor="middle">recomputed every 8 samples</text>
+  <path class="wc" d="M630,111 H665" marker-end="url(#ac)"/>
+
+  <path class="wc" d="M770,134 V180 H400 V222" marker-end="url(#ac)"/>
+  <text class="note" x="560" y="174" text-anchor="middle">to all three</text>
+
+  <!-- ==================== AUDIO ==================== -->
+  <text class="lane" x="30" y="212" fill="#2f6296">AUDIO — one channel of two</text>
+
+  <rect class="bank" x="214" y="228" width="480" height="286"/>
+  <text class="s" x="228" y="246" fill="#5b7a96">parallel bank — summed, not cascaded</text>
+
+  <rect class="bx neu" x="30" y="336" width="112" height="58"/>
+  <text class="t" x="86" y="360" text-anchor="middle">Audio In</text>
+  <text class="s" x="86" y="377" text-anchor="middle">stereo</text>
+
+  <path class="wa" d="M142,365 H180"/>
+  <circle cx="180" cy="365" r="4.5" fill="#2f6296"/>
+
+  <rect class="bx aud" x="236" y="250" width="190" height="58"/>
+  <text class="t" x="331" y="273" text-anchor="middle">BP  F1</text>
+  <text class="s" x="331" y="291" text-anchor="middle">constant 0 dB peak</text>
+  <path class="wa" d="M180,365 V279 H236" marker-end="url(#aa)"/>
+
+  <rect class="bx aud" x="236" y="336" width="190" height="58"/>
+  <text class="t" x="331" y="359" text-anchor="middle">BP  F2</text>
+  <text class="s" x="331" y="377" text-anchor="middle">constant 0 dB peak</text>
+  <path class="wa" d="M180,365 H236" marker-end="url(#aa)"/>
+
+  <rect class="bx aud" x="236" y="422" width="190" height="58"/>
+  <text class="t" x="331" y="445" text-anchor="middle">BP  F3</text>
+  <text class="s" x="331" y="463" text-anchor="middle">constant 0 dB peak</text>
+  <path class="wa" d="M180,365 V451 H236" marker-end="url(#aa)"/>
+
+  <circle cx="486" cy="279" r="17" fill="#e4eef9" stroke="#2f6296" stroke-width="1.4"/>
+  <text class="t" x="486" y="284" text-anchor="middle">A1</text>
+  <path class="wa" d="M426,279 H469" marker-end="url(#aa)"/>
+
+  <circle cx="486" cy="365" r="17" fill="#fbe3e3" stroke="#a33b3b" stroke-width="1.8"/>
+  <text class="t" x="486" y="371" text-anchor="middle" fill="#8f2f2f">−A2</text>
+  <path class="wa" d="M426,365 H469" marker-end="url(#aa)"/>
+  <text class="note" x="486" y="404" text-anchor="middle" fill="#8f2f2f">inverted</text>
+
+  <circle cx="486" cy="451" r="17" fill="#e4eef9" stroke="#2f6296" stroke-width="1.4"/>
+  <text class="t" x="486" y="456" text-anchor="middle">A3</text>
+  <path class="wa" d="M426,451 H469" marker-end="url(#aa)"/>
+
+  <circle cx="600" cy="365" r="20" fill="#e4eef9" stroke="#2f6296" stroke-width="1.6"/>
+  <text class="t" x="600" y="372" text-anchor="middle" font-size="18">Σ</text>
+  <path class="wa" d="M503,279 H600 V345" marker-end="url(#aa)"/>
+  <path class="wa" d="M503,365 H578" marker-end="url(#aa)"/>
+  <path class="wa" d="M503,451 H600 V385" marker-end="url(#aa)"/>
+
+  <rect class="bx neu" x="236" y="560" width="190" height="46"/>
+  <text class="t" x="331" y="583" text-anchor="middle">dry</text>
+  <text class="s" x="331" y="598" text-anchor="middle">unfiltered</text>
+  <path class="wa" d="M180,365 V583 H236" marker-end="url(#aa)"/>
+
+  <rect class="bx aud" x="740" y="336" width="150" height="58"/>
+  <text class="t" x="815" y="359" text-anchor="middle">Dry / Wet</text>
+  <text class="s" x="815" y="377" text-anchor="middle">0–100 %</text>
+  <path class="wa" d="M620,365 H740" marker-end="url(#aa)"/>
+  <text class="note" x="680" y="356" text-anchor="middle">wet</text>
+  <path class="wa" d="M426,583 H815 V394" marker-end="url(#aa)"/>
+
+  <rect class="bx out" x="930" y="336" width="150" height="58"/>
+  <text class="t" x="1005" y="359" text-anchor="middle">Output Trim</text>
+  <text class="s" x="1005" y="377" text-anchor="middle">−60 … 0 dB</text>
+  <path class="wo" d="M890,365 H930" marker-end="url(#ao)"/>
+
+  <rect class="bx neu" x="1120" y="336" width="95" height="58"/>
+  <text class="t" x="1167" y="360" text-anchor="middle">Out</text>
+  <text class="s" x="1167" y="377" text-anchor="middle">stereo</text>
+  <path class="wo" d="M1080,365 H1120" marker-end="url(#ao)"/>
+
+  <!-- ==================== DISPLAY TAP ==================== -->
+  <text class="lane" x="30" y="648" fill="#8b8b82">OBSERVATION — nothing below this line is in the audio path</text>
+
+  <path class="tap" d="M600,514 V636" marker-end="url(#at)"/>
+  <text class="note" x="612" y="556" >where the formants are now</text>
+
+  <rect class="bx obs" x="470" y="636" width="270" height="52"/>
+  <text class="t" x="605" y="658" text-anchor="middle">outputParameterChanges</text>
+  <text class="s" x="605" y="675" text-anchor="middle">9 read-only, hidden</text>
+
+  <rect class="bx obs" x="790" y="636" width="130" height="52"/>
+  <text class="t" x="855" y="658" text-anchor="middle">Controller</text>
+  <text class="s" x="855" y="675" text-anchor="middle">the other component</text>
+  <path class="tap" d="M740,662 H790" marker-end="url(#at)"/>
+
+  <rect class="bx obs" x="970" y="636" width="245" height="52"/>
+  <text class="t" x="1092" y="658" text-anchor="middle">Response display</text>
+  <text class="s" x="1092" y="675" text-anchor="middle">F1 F2 F3 and the sum</text>
+  <path class="tap" d="M920,662 H970" marker-end="url(#at)"/>
+</svg>
+
+<div class="notes">
+  <div>
+    <h2>F2 is summed inverted</h2>
+    <p>A bandpass runs from +90° below its centre to −90° above, so between F1 and F2 the two branches are half a turn apart. Summed with the same sign they <em>cancel</em>, digging a null an all-pole tract does not have — measured at −20.4 dB against −8.5 dB inverted.</p>
+    <p>Dropping the inversion leaves every peak exactly where it is and moves only the valleys, which is why the test for it looks at a valley.</p>
+  </div>
+  <div>
+    <h2>Vowel is a mode, not a recall</h2>
+    <p>While it is on a preset the DSP takes that vowel's nine values and the nine parameters are <em>ignored</em>. The processor reads it, not the controller, so it works with the editor closed, offline and under automation.</p>
+    <p>Touching a formant slider captures the preset's values into the parameters and switches back to Manual, so nothing jumps.</p>
+  </div>
+  <div>
+    <h2>The display reads published values</h2>
+    <p>It follows the <em>gliding</em> values, which live in the processor, so they cross to the controller as nine read-only hidden parameters. Not a message: a message sent from <code>process()</code> is silently discarded by the host's connection proxy.</p>
+    <p>The sample rate does travel by message, from <code>setActive</code>, where the UI thread makes one legal.</p>
+  </div>
+</div>
+</div>
