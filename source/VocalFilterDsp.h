@@ -227,7 +227,7 @@ struct VowelPreset
 
 constexpr int kVowelCount = 5;
 
-constexpr VowelPreset kVowels[kVowelCount] =
+constexpr VowelPreset kVowelsMale[kVowelCount] =
 {
 	{ "Aaaa", "/a/ as in father",
 	  { kAaaFormants[0], kAaaFormants[1], kAaaFormants[2] } },
@@ -254,6 +254,62 @@ constexpr VowelPreset kVowels[kVowelCount] =
 	  { {  300.0,  50.0,   0.0 }, {  870.0,  90.0, -10.2 }, { 2240.0, 120.0, -30.0 } } },
 };
 
+//------------------------------------------------------------------------
+/** The same five vowels in an adult FEMALE voice.
+ *
+ *  A female vocal tract is roughly 15 % shorter, so every formant sits
+ *  higher. Frequencies are again Peterson & Barney's adult-female means,
+ *  with Oooo again the exception - /ou/ is a diphthong they did not
+ *  measure, so it is scaled from the male /o/ set by the mean male-to-
+ *  female ratio of the three back vowels they DID measure (1.112, 1.108,
+ *  1.171 for F1, F2, F3).
+ *
+ *  Bandwidth rises with formant frequency, so each B is scaled by its own
+ *  formant's ratio and rounded to 5 Hz.
+ *
+ *  THE LEVELS ARE THE MALE ONES, DELIBERATELY. They are a property of the
+ *  VOWEL, not of the voice: what a shorter tract changes is where the
+ *  resonances sit, not much how they are balanced. Refitting them against
+ *  the female cascade was tried and is a trap - see ENGINEERING-NOTES
+ *  DEVIATION 4. With these levels every female vowel keeps all three
+ *  formants as real peaks in the summed response, the worst landing
+ *  1.26 % from where it was asked for. */
+constexpr VowelPreset kVowelsFemale[kVowelCount] =
+{
+	{ "Aaaa", "/a/ as in father",
+	  { {  850.0,  95.0,   0.0 }, { 1220.0, 100.0,  -3.3 }, { 2810.0, 140.0, -26.8 } } },
+
+	{ "Eeee", "/i/ as in beet",
+	  { {  310.0,  55.0,   0.0 }, { 2790.0, 120.0,  -8.0 }, { 3310.0, 155.0,  -2.3 } } },
+
+	{ "Iiii", "/I/ as in bit",
+	  { {  430.0,  65.0,   0.0 }, { 2480.0, 125.0,  -8.2 }, { 3070.0, 155.0,  -7.6 } } },
+
+	{ "Oooo", "/o/ as in boat",
+	  { {  500.0,  65.0,   0.0 }, {  995.0, 100.0,  -7.4 }, { 2810.0, 140.0, -30.0 } } },
+
+	{ "Uuuu", "/u/ as in boot",
+	  { {  370.0,  60.0,   0.0 }, {  950.0, 100.0, -10.2 }, { 2670.0, 145.0, -30.0 } } },
+};
+
+//------------------------------------------------------------------------
+/** Which voice the vowel buttons speak in. */
+constexpr int kVoiceMale   = 0;
+constexpr int kVoiceFemale = 1;
+constexpr int kVoiceCount  = 2;
+
+/** constexpr, so the static_asserts in VocalFilterParams.cpp can prove at
+    COMPILE time that both tables are reachable by the sliders. */
+constexpr const VowelPreset* vowelTable (int voice)
+{
+	return (voice == kVoiceFemale) ? kVowelsFemale : kVowelsMale;
+}
+
+constexpr const char* voiceName (int voice)
+{
+	return (voice == kVoiceFemale) ? "Female" : "Male";
+}
+
 constexpr double kMixDefault = 100.0;   // fully wet: the model, not a colour
 
 //------------------------------------------------------------------------
@@ -269,19 +325,20 @@ constexpr double kMixDefault = 100.0;   // fully wet: the model, not a colour
 constexpr int kVowelManual  = 0;
 constexpr int kVowelChoices = kVowelCount + 1;
 
-inline const FormantSetting* vowelSelection (int selector)
+constexpr const FormantSetting* vowelSelection (int selector, int voice)
 {
 	if (selector <= kVowelManual || selector > kVowelCount)
 		return nullptr;
-	return kVowels[selector - 1].formants;
+	return vowelTable (voice)[selector - 1].formants;
 }
 
-/** What the host's parameter list calls each position. */
-inline const char* vowelSelectionName (int selector)
+/** What the host's parameter list calls each position. Voice-independent:
+    Aaaa is Aaaa in either voice, which is the point of the switch. */
+constexpr const char* vowelSelectionName (int selector)
 {
 	if (selector <= kVowelManual || selector > kVowelCount)
 		return "Manual";
-	return kVowels[selector - 1].name;
+	return kVowelsMale[selector - 1].name;
 }
 
 //------------------------------------------------------------------------

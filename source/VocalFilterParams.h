@@ -88,6 +88,12 @@ enum Param : Steinberg::Vst::ParamID
 	kLiveF2Freq, kLiveF2Bandwidth, kLiveF2Level,     // 16, 17, 18
 	kLiveF3Freq, kLiveF3Bandwidth, kLiveF3Level,     // 19, 20, 21
 
+	/** Male or female. APPENDED after the published values because ids are
+	    never moved - which puts a setting on the far side of them, so it
+	    is saved explicitly rather than by the `id < kNumStoredParams`
+	    rule. See VocalFilterProcessor::getState. */
+	kVoice,                                          // 22
+
 	kNumParams
 };
 
@@ -114,10 +120,18 @@ inline bool isLiveParam (Steinberg::Vst::ParamID id)
 	return id >= kLiveBase && id < kNumParams;
 }
 
-/** Everything up to here is saved in the plug-in's state; the published
-    values are not, because they are a view of the DSP rather than a
-    setting. Both sides of setState/getState stop at this id. */
+/** The settings run from 0 to here; the published values follow and are
+    NOT saved, because they are a view of the DSP rather than a setting.
+    kVoice sits past them and is saved separately - see the state code. */
 constexpr Steinberg::Vst::ParamID kNumStoredParams = kLiveBase;
+
+/** The name of one choice of an enumerated parameter. */
+inline const char* enumChoiceName (Steinberg::Vst::ParamID id, int choice)
+{
+	if (id == kVoice)
+		return voiceName (choice);
+	return vowelSelectionName (choice);
+}
 
 /** The VST3 bypass, which hosts expect. 1000 is the convention, and it is
     far past the end of kParams - so RANGE-CHECK every id before indexing

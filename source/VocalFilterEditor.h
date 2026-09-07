@@ -70,7 +70,12 @@ public:
 	static constexpr int kTitleTop    = 4;
 	static constexpr int kTitleHeight = 15;
 
-	static constexpr int kVowelTop    = kTitleTop + kTitleHeight + 7;
+	/** The voice switch gets a row of its own, above the vowels, because
+	    it changes what every one of those buttons means. */
+	static constexpr int kVoiceTop    = kTitleTop + kTitleHeight + 6;
+	static constexpr int kVoiceHeight = 22;
+
+	static constexpr int kVowelTop    = kVoiceTop + kVoiceHeight + 8;
 	static constexpr int kVowelHeight = 23;
 	static constexpr int kVowelGap    = 8;
 
@@ -89,7 +94,7 @@ public:
 	static constexpr int kDisplayGap   = 16;
 	static constexpr int kDisplayWidth = 300;
 	static constexpr int kDisplayLeft  = kMargin + kContentWidth + kDisplayGap;
-	static constexpr int kDisplayTop    = kVowelTop;
+	static constexpr int kDisplayTop    = kVoiceTop;
 	static constexpr int kDisplayBottom = kBottomRowTop + kSliderHeight;
 
 	static constexpr int kEditorWidth  =
@@ -128,6 +133,9 @@ private:
 	/** The selector's current position, 0 = Manual. */
 	int currentVowel () const;
 
+	/** Male or female - which table the vowel buttons speak from. */
+	int currentVoice () const;
+
 	/** Light the right button, and put the values the DSP is actually
 	    using on the nine sliders - which on a preset are the preset's, not
 	    the parameters'. Display only; nothing is written. */
@@ -150,6 +158,7 @@ private:
 
 	std::map<Steinberg::Vst::ParamID, VSTGUI::CControl*> mControls;
 	SpyPresetButton* mVowelButtons[kVowelCount] = { nullptr };
+	SpyToggle* mVoiceToggle = nullptr;
 	SpyResponseDisplay* mDisplay = nullptr;
 
 	VSTGUI::SharedPointer<VSTGUI::CVSTGUITimer> mTimer;

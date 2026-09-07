@@ -60,6 +60,8 @@ const ParamDef kParams[kNumParams] =
 	{ kLiveF3Freq,                  "F3 Live Freq", "Hz", ParamType::Float, kFormantFreqMin[2],  kFormantFreqMax[2],  kAaaFormants[2].freqHz,         kFormantFreqMin[2],  kFormantFreqMax[2],  0,    false },
 	{ kLiveF3Bandwidth,             "F3 Live Width","Hz", ParamType::Float, kBandwidthMin,       kBandwidthMax,       kAaaFormants[2].bandwidthHz,    kBandwidthMin,       kBandwidthMax,       0,    false },
 	{ kLiveF3Level,                 "F3 Live Level","dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[2].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    false },
+
+	{ kVoice,                       "Voice",        "",   ParamType::Enum,  0.0,                 kVoiceCount - 1,     kVoiceMale,                     0.0,                 kVoiceCount - 1,     kVoiceCount - 1, false },
 };
 
 //------------------------------------------------------------------------
@@ -68,7 +70,7 @@ const ParamDef kParams[kNumParams] =
 // wrong place is exactly the kind of mistake that presents as "the width
 // slider moves the level".
 //------------------------------------------------------------------------
-static_assert (kNumParams == 22, "thirteen settings plus nine published values");
+static_assert (kNumParams == 23, "thirteen settings, nine published values, and the voice");
 static_assert (kNumStoredParams == 13, "only the settings are saved");
 static_assert (liveParam (0, kFieldFreq)  == kLiveF1Freq,  "live F1 freq id");
 static_assert (liveParam (2, kFieldLevel) == kLiveF3Level, "live F3 level id");
@@ -94,29 +96,39 @@ namespace {
 
 constexpr bool within (double v, double lo, double hi) { return v >= lo && v <= hi; }
 
-constexpr bool vowelIsReachable (int vowel)
+constexpr bool vowelIsReachable (int vowel, int voice)
 {
 	for (int k = 0; k < kFormantCount; ++k)
 	{
-		const FormantSetting& f = kVowels[vowel].formants[k];
+		const FormantSetting& f = vowelTable (voice)[vowel].formants[k];
 		if (! within (f.freqHz,      kFormantFreqMin[k], kFormantFreqMax[k]) ||
 		    ! within (f.bandwidthHz, kBandwidthMin,      kBandwidthMax)      ||
 		    ! within (f.levelDb,     kLevelMinDb,        kLevelMaxDb))
 			return false;
 	}
 	// And the formants must be in order, or it is not a vowel.
-	return kVowels[vowel].formants[0].freqHz < kVowels[vowel].formants[1].freqHz
-	    && kVowels[vowel].formants[1].freqHz < kVowels[vowel].formants[2].freqHz;
+	const FormantSetting* f = vowelTable (voice)[vowel].formants;
+	return f[0].freqHz < f[1].freqHz && f[1].freqHz < f[2].freqHz;
 }
 
 } // namespace
 
 static_assert (kVowelCount == 5, "five buttons: A E I O U");
-static_assert (vowelIsReachable (0), "Aaaa is outside its sliders' ranges");
-static_assert (vowelIsReachable (1), "Eeee is outside its sliders' ranges");
-static_assert (vowelIsReachable (2), "Iiii is outside its sliders' ranges");
-static_assert (vowelIsReachable (3), "Oooo is outside its sliders' ranges");
-static_assert (vowelIsReachable (4), "Uuuu is outside its sliders' ranges");
+static_assert (kVoiceCount == 2, "two voices: male and female");
+
+// BOTH voices, because the female formants are higher and it is the female
+// Eeee - F2 2790 of a 3000 ceiling, F3 3310 of 4000 - that would go first if
+// a range were ever narrowed.
+static_assert (vowelIsReachable (0, kVoiceMale),   "male Aaaa is outside its sliders' ranges");
+static_assert (vowelIsReachable (1, kVoiceMale),   "male Eeee is outside its sliders' ranges");
+static_assert (vowelIsReachable (2, kVoiceMale),   "male Iiii is outside its sliders' ranges");
+static_assert (vowelIsReachable (3, kVoiceMale),   "male Oooo is outside its sliders' ranges");
+static_assert (vowelIsReachable (4, kVoiceMale),   "male Uuuu is outside its sliders' ranges");
+static_assert (vowelIsReachable (0, kVoiceFemale), "female Aaaa is outside its sliders' ranges");
+static_assert (vowelIsReachable (1, kVoiceFemale), "female Eeee is outside its sliders' ranges");
+static_assert (vowelIsReachable (2, kVoiceFemale), "female Iiii is outside its sliders' ranges");
+static_assert (vowelIsReachable (3, kVoiceFemale), "female Oooo is outside its sliders' ranges");
+static_assert (vowelIsReachable (4, kVoiceFemale), "female Uuuu is outside its sliders' ranges");
 
 //------------------------------------------------------------------------
 const ParamDef& paramDef (Steinberg::Vst::ParamID id)

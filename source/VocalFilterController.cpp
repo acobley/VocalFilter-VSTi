@@ -74,7 +74,7 @@ void VocalFilterController::addParameters ()
 			{
 				String128 name;
 				UString (name, str16BufferSize (String128))
-					.assign (vowelSelectionName (choice));
+					.assign (enumChoiceName (id, choice));
 				list->appendString (name);
 			}
 			parameters.addParameter (list);
@@ -152,6 +152,17 @@ tresult PLUGIN_API VocalFilterController::setComponentState (IBStream* state)
 	int32 bypass = 0;
 	if (streamer.readInt32 (bypass))
 		setParamNormalized (kBypass, bypass ? 1.0 : 0.0);
+
+	// Same tail the processor writes: kVoice last, and absent in a stream
+	// saved before the switch existed.
+	setParamNormalized (kVoice, kParams[kVoice].defaultNormalized ());
+	int32 voice = 0;
+	if (streamer.readInt32 (voice))
+	{
+		setParamNormalized (kVoice, kParams[kVoice].toNormalized (
+			std::min (static_cast<double> (kVoiceCount - 1),
+			          std::max (0.0, static_cast<double> (voice)))));
+	}
 
 	return kResultOk;
 }

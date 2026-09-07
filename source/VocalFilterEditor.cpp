@@ -94,6 +94,15 @@ int VocalFilterEditor::currentVowel () const
 }
 
 //------------------------------------------------------------------------
+int VocalFilterEditor::currentVoice () const
+{
+	if (mController == nullptr)
+		return kVoiceMale;
+	return static_cast<int> (
+		kParams[kVoice].toInternal (mController->getParamNormalized (kVoice)) + 0.5);
+}
+
+//------------------------------------------------------------------------
 void VocalFilterEditor::selectVowel (int selector)
 {
 	setParameter (kVowel, static_cast<double> (selector));
@@ -102,7 +111,7 @@ void VocalFilterEditor::selectVowel (int selector)
 //------------------------------------------------------------------------
 void VocalFilterEditor::captureAndGoManual ()
 {
-	const FormantSetting* preset = vowelSelection (currentVowel ());
+	const FormantSetting* preset = vowelSelection (currentVowel (), currentVoice ());
 	if (preset == nullptr)
 		return;                        // already Manual
 
@@ -127,7 +136,7 @@ void VocalFilterEditor::refreshVowelState ()
 		return;
 
 	const int selector = currentVowel ();
-	const FormantSetting* preset = vowelSelection (selector);
+	const FormantSetting* preset = vowelSelection (selector, currentVoice ());
 
 	for (int v = 0; v < kVowelCount; ++v)
 		if (mVowelButtons[v])
@@ -226,6 +235,27 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	                   kTitleTop + kTitleHeight));
 
 	//--------------------------------------------------------------------
+	// The voice switch, one grid column wide so it lines up with F1. It is
+	// an ordinary parameter control - a two-state SlideSpin with the state
+	// names on it - so a host automating Voice and a click here are the
+	// same write, exactly as with the vowel buttons.
+	//--------------------------------------------------------------------
+	{
+		mVoiceToggle = new SpyToggle (
+			CRect (kMargin, kVoiceTop, kMargin + kSliderWidth, kVoiceTop + kVoiceHeight),
+			this, static_cast<int32_t> (kVoice));
+		mVoiceToggle->setStateNames (voiceName (kVoiceMale), voiceName (kVoiceFemale));
+		mControls[kVoice] = mVoiceToggle;
+		mVoiceToggle->setValueNormalized (
+			static_cast<float> (mController->getParamNormalized (kVoice)));
+		frame->addView (mVoiceToggle);
+
+		addHeading ("voice — moves every vowel's formants",
+		            CRect (kMargin + kSliderWidth + 14, kVoiceTop + 4,
+		                   kMargin + kContentWidth, kVoiceTop + 18));
+	}
+
+	//--------------------------------------------------------------------
 	// The five vowel buttons. Each one writes the VOWEL SELECTOR - one
 	// parameter, not nine - so a button press and a host automating Vowel
 	// travel the identical path through the processor.
@@ -239,7 +269,7 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	//--------------------------------------------------------------------
 	for (int v = 0; v < kVowelCount; ++v)
 	{
-		auto* button = new SpyPresetButton (vowelCell (v), kVowels[v].name);
+		auto* button = new SpyPresetButton (vowelCell (v), vowelSelectionName (v + 1));
 		// v + 1, because 0 on the selector is Manual.
 		button->setHandler ([this, v] { selectVowel (v + 1); });
 		mVowelButtons[v] = button;
@@ -338,7 +368,7 @@ void VocalFilterEditor::refreshDisplay ()
 	const bool live = mController->hasLiveValues ();
 
 	FormantSetting shown[kFormantCount];
-	const FormantSetting* preset = vowelSelection (currentVowel ());
+	const FormantSetting* preset = vowelSelection (currentVowel (), currentVoice ());
 
 	for (int k = 0; k < kFormantCount; ++k)
 	{
@@ -380,6 +410,7 @@ void PLUGIN_API VocalFilterEditor::close ()
 	for (auto*& button : mVowelButtons)
 		button = nullptr;
 	mDisplay = nullptr;
+	mVoiceToggle = nullptr;
 
 	if (frame)
 	{
@@ -403,7 +434,7 @@ void VocalFilterEditor::valueChanged (CControl* control)
 	// worst thing a control can do. Capturing first means the sound does
 	// not jump: the eight values you did not touch are already the ones
 	// you could hear.
-	if (tag < kNumParams && isFormantParam (tag) && currentVowel () != kVowelManual)
+	if (isFormantParam (tag) && currentVowel () != kVowelManual)
 		captureAndGoManual ();
 
 	mController->setParamNormalized (tag, value);
@@ -435,11 +466,15 @@ void VocalFilterEditor::updateControl (ParamID tag, ParamValue normalized)
 	if (isLiveParam (tag))
 		return;
 
-	// The selector moving changes what every formant slider should be
-	// showing, so it is not a control update - it is a whole-panel one.
-	if (tag == kVowel)
+	// The selector - or the VOICE, which changes what every preset is -
+	// moving changes what every formant slider should be showing, so it is
+	// not a control update, it is a whole-panel one.
+	if (tag == kVowel || tag == kVoice)
 	{
+		if (tag == kVoice && mVoiceToggle)
+			mVoiceToggle->setValueNormalized (static_cast<float> (normalized));
 		refreshVowelState ();
+		refreshDisplay ();
 		return;
 	}
 

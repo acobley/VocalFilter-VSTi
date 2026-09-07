@@ -8,11 +8,15 @@ vowel names and parameter ranges out of VocalFilterDsp.h. If a constant
 becomes an expression this cannot evaluate, the script fails loudly rather
 than quietly drawing a layout that is not the one that will ship.
 
-    python3 tools/render-panel.py [out.png] [selected-vowel]
+    python3 tools/render-panel.py [out.png] [selected-vowel] [voice]
 
 `selected-vowel` is 0 for Manual (the default the plug-in loads with, and
 what this draws if the argument is left off) or 1..5 to show one of the
 vowel buttons lit, as it is when the Vowel parameter is on a preset.
+
+`voice` is 0 for male (the default) or 1 for female. It sets the switch's
+label and the formant values and curves the panel is drawn with, so the
+female set can be LOOKED AT rather than reasoned about.
 """
 
 import cmath
@@ -43,9 +47,24 @@ def constants(path, extra):
 
 def vowel_names(path):
     text = open(path, encoding='utf-8').read()
-    block = text[text.index('constexpr VowelPreset kVowels'):]
+    block = text[text.index('constexpr VowelPreset kVowelsMale'):]
     block = block[:block.index('};')]
     return re.findall(r'\{\s*"([^"]+)"\s*,\s*"([^"]+)"', block)
+
+
+def vowel_table(path, which):
+    """The five (freq, bandwidth, level) triples of one voice's table."""
+    text = open(path, encoding='utf-8').read()
+    block = text[text.index('constexpr VowelPreset kVowels' + which):]
+    block = block[:block.index('};')]
+    rows = re.findall(
+        r'\{\s*([-\d.]+),\s*([-\d.]+),\s*([-\d.]+)\s*\}', block)
+    out, cur = [], []
+    for a, b, c in rows:
+        cur.append((float(a), float(b), float(c)))
+        if len(cur) == 3:
+            out.append(cur); cur = []
+    return out
 
 
 DSP = os.path.join(SRC, 'VocalFilterDsp.h')
@@ -121,6 +140,17 @@ centred('Vocal Tract  -  three parallel formants',
 # push button and a state indicator, because the Vowel parameter can move
 # under automation with nobody touching the panel.
 SELECTED = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+VOICE = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+
+# the voice switch, a two-state SlideSpin one grid column wide
+vt = env['kVoiceTop']
+box(env['kMargin'], vt, env['kMargin'] + env['kSliderWidth'], vt + env['kVoiceHeight'] - 3,
+    fill=BAR_FILL if VOICE else None)
+centred('Female' if VOICE else 'Male', env['kMargin'], vt + 4,
+        env['kMargin'] + env['kSliderWidth'], vt + 17, LABEL)
+d.text(((env['kMargin'] + env['kSliderWidth'] + 14) * SCALE, (vt + 4) * SCALE),
+       'voice - moves every vowel\'s formants', fill=LABEL, font=F7)
+
 n = env['kVowelCount']
 bw = (env['kContentWidth'] - (n - 1) * env['kVowelGap']) / n
 for i, (name, sound) in enumerate(VOWELS):
@@ -139,9 +169,9 @@ for c, head in enumerate(('F1', 'F2', 'F3')):
             env['kHeadingTop'] + env['kHeadingHeight'], LABEL)
 
 # the grid, showing the Aaa patch
-AAA = [('730 Hz', '80 Hz', '0.0 dB'),
-       ('1090 Hz', '90 Hz', '-3.3 dB'),
-       ('2440 Hz', '120 Hz', '-26.8 dB')]
+TABLE = vowel_table(DSP, 'Female' if VOICE else 'Male')
+SHOWN = TABLE[max(SELECTED - 1, 0)]
+AAA = [(f'{f:.0f} Hz', f'{b:.0f} Hz', f'{l:.1f} dB') for f, b, l in SHOWN]
 for c in range(3):
     for r, lab in enumerate(('Freq', 'Width', 'Level')):
         x0, y0, x1, y1 = cell(c, r)
@@ -224,7 +254,7 @@ for name, colour, w in LEGEND:
     d.text((lx * SCALE, cap[1] * SCALE), name, fill=colour, font=F7)
     lx += w
 
-FORMANTS = ((730, 80, 0.0), (1090, 90, -3.3), (2440, 120, -26.8))
+FORMANTS = tuple(SHOWN)
 POLARITY = (1.0, -1.0, 1.0)
 
 

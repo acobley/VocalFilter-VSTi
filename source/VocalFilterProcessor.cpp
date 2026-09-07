@@ -181,7 +181,9 @@ void VocalFilterProcessor::pushParameters ()
 	// were left.
 	const int selector = static_cast<int> (
 		kParams[kVowel].toInternal (mParams[kVowel]) + 0.5);
-	const FormantSetting* preset = vowelSelection (selector);
+	const int voice = static_cast<int> (
+		kParams[kVoice].toInternal (mParams[kVoice]) + 0.5);
+	const FormantSetting* preset = vowelSelection (selector, voice);
 
 	for (int formant = 0; formant < kFormantCount; ++formant)
 	{
@@ -393,6 +395,19 @@ tresult PLUGIN_API VocalFilterProcessor::setState (IBStream* state)
 	if (streamer.readInt32 (bypass))
 		mBypass = (bypass != 0);
 
+	// kVoice is id 22, past the published values, so the loop above does not
+	// reach it. Written last and read last, and ABSENT IN AN OLDER STREAM -
+	// a project saved before the switch existed simply keeps the male voice
+	// it was made with, which is the right answer and needs no version bump.
+	mParams[kVoice] = kParams[kVoice].defaultNormalized ();
+	int32 voice = 0;
+	if (streamer.readInt32 (voice))
+	{
+		mParams[kVoice] = kParams[kVoice].toNormalized (
+			std::min (static_cast<double> (kVoiceCount - 1),
+			          std::max (0.0, static_cast<double> (voice))));
+	}
+
 	pushParameters ();
 	mDsp.snapParameters ();   // a load is not a 10 ms ramp from the old value
 
@@ -417,6 +432,12 @@ tresult PLUGIN_API VocalFilterProcessor::getState (IBStream* state)
 	}
 
 	if (!streamer.writeInt32 (mBypass ? 1 : 0))
+		return kResultFalse;
+
+	// Appended after the bypass, so a reader that stops early - one built
+	// before the switch existed - still gets a complete, valid state.
+	if (!streamer.writeInt32 (static_cast<int32> (
+			kParams[kVoice].toInternal (mParams[kVoice]) + 0.5)))
 		return kResultFalse;
 
 	return kResultOk;

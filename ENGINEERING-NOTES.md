@@ -22,10 +22,10 @@ summed, mixed against the dry signal and trimmed.
 | Buses | **Stereo in, stereo out, and nothing else** | `setBusArrangements` refuses every other layout and `resource/au-info.plist` lists only `2/2` to match — auval is strict about the two agreeing |
 | Sample formats | 32- and 64-bit accepted | the line is float, as these plug-ins were; a 64-bit host is converted through `mScratchIn/Out` rather than refused |
 | Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
-| Parameters | thirteen settings, plus nine read-only hidden values the processor publishes for the display | sections 2 and 4b |
+| Parameters | fourteen settings, plus nine read-only hidden values the processor publishes for the display | sections 2 and 4b |
 | Editor | **Yes** | a silent processor-and-controller shell was got validating first, while there was little code to search; the panel came afterwards |
 | Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand, plus `SpyPresetButton` | section 4 |
-| Vowel presets | five — A E I O U — reached from the panel or from a host-automatable **Vowel** parameter | sections 2 and 2c |
+| Vowel presets | five — A E I O U — in **two voices**, reached from the panel or from host-automatable **Vowel** and **Voice** parameters | sections 2, 2c and 2d |
 | Vowel transitions | a timed **linear ramp**, one length for all nine, so they arrive together | section 2b |
 
 ```
@@ -140,7 +140,14 @@ wrong control, and list order is a far smaller price than that.
 13..21  the same nine formant fields again, READ-ONLY and HIDDEN: where the
         DSP actually is, published for the response display. Not saved -
         setState and getState both stop at kNumStoredParams (13).
+22  Voice         --     Male, Female                          default Male
 ```
+
+`kVoice` is id 22 because ids are only ever appended, which puts a *setting*
+on the far side of the published values. It is therefore saved **explicitly**,
+written after the bypass and read after it, and treated as absent in an older
+stream — a project saved before the switch existed keeps the male voice it was
+made with, which is the right answer and needed no version bump.
 
 `kBypass` is 1000, far past the end of the table; everything that indexes
 `kParams` range-checks first. `formantParam(formant, field)` is the only
@@ -334,6 +341,70 @@ leaks at every frequency, the leakage was the same in both runs, and it
 buried the thing being measured. A Hann window kills the leakage; a sliding
 frame is what makes a click, whose energy is in one frame, stand out from a
 sweep, whose energy is spread over hundreds.
+
+### 2d. The Voice switch — male and female
+
+`Voice` is a two-position parameter that changes which table the five vowel
+buttons speak from. A female vocal tract is roughly 15 % shorter, so every
+formant sits higher.
+
+| | F1 | F2 | F3 | | F1 | F2 | F3 |
+|---|---|---|---|---|---|---|---|
+| **Aaaa** male | 730 | 1090 | 2440 | female | 850 | 1220 | 2810 |
+| **Eeee** male | 270 | 2290 | 3010 | female | 310 | 2790 | 3310 |
+| **Iiii** male | 390 | 1990 | 2550 | female | 430 | 2480 | 3070 |
+| **Oooo** male | 450 | 900 | 2400 | female | 500 | 995 | 2810 |
+| **Uuuu** male | 300 | 870 | 2240 | female | 370 | 950 | 2670 |
+
+Female frequencies are Peterson & Barney's adult-female means, with Oooo the
+same exception as before — /oʊ/ is a diphthong they did not measure, so it is
+scaled from the male /o/ set by the mean male-to-female ratio of the three
+back vowels they *did* measure: **1.112, 1.108, 1.171** for F1, F2, F3.
+Bandwidth rises with formant frequency, so each B is scaled by its own
+formant's ratio and rounded to 5 Hz.
+
+**Nothing else needed changing.** The frequencies all sit inside the shipped
+parameter ranges — the tightest is female Eeee's F2 at 2790 of a 3000
+ceiling — and `VocalFilterParams.cpp` now carries a `static_assert` per vowel
+**per voice** proving it, because it is that row that would break first if a
+range were ever narrowed.
+
+### DEVIATION 4 — the female levels are the male ones, and refitting them is a trap
+
+The obvious move was to refit A2 and A3 against the female cascade, exactly as
+DEVIATION 2 did for the male set. It produces this:
+
+| | A2 | A3 | |
+|---|---|---|---|
+| Aaaa | −2.7 | −28.4 | |
+| Eeee | **−24.7** | **+3.4** | ← |
+| Iiii | −7.6 | −3.9 | |
+| Oooo | −8.4 | −39.1 | below the −40 floor's comfort zone |
+| Uuuu | −9.8 | **−42.7** | **outside the parameter's range entirely** |
+
+Two things are wrong with it. Uuuu's F3 fits *below* the Level parameter's
+−40 dB floor, so it could not be represented at all. And Eeee's A2 at −24.7 dB
+**buries the formant that defines /i/** — with those levels the summed
+response has no F2 peak: F2 disappears into F3's skirt and the response has
+one broad peak where the tract has two.
+
+The cascade those numbers were fitted to has **two** peaks there, at 2797 and
+3305 Hz. So the fit was not describing the tract; it was minimising an RMS
+error that does not care whether the formant structure survives.
+
+**The male level profile, applied to the female frequencies, keeps every
+peak** — worst error 1.26 %, RMS cost 0.07 to 0.54 dB against the
+unconstrained optima. So the levels are shared, and that is a statement about
+what a voice *is*: a shorter tract moves where the resonances sit, not much
+how they are balanced. The suite asserts the two tables share their levels, so
+the decision cannot rot quietly.
+
+**Two of my own measurements were wrong on the way to this**, and both for the
+same reason: a peak search windowed at ±20 % around each nominal formant. For
+female Eeee that window (2232–3348 Hz) *contains* F3 at 3310, so it found F3,
+called it F2, and reported a failure. It made a working configuration look
+broken and sent the fit chasing it. The suite now finds **local maxima** and
+matches each formant to the nearest one, with no windows at all.
 
 ### 2c. The Vowel selector — a mode, acted on by the PROCESSOR
 
@@ -780,7 +851,7 @@ c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-Forty-seven assertions, all passing. The ones worth knowing about:
+Sixty-one assertions, all passing. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
@@ -797,6 +868,11 @@ Forty-seven assertions, all passing. The ones worth knowing about:
   them, that F1 stays pinned at 0 dB, that nothing sits near the level floor,
   and that the F1–F2 valley matches an inverted F2 rather than an in-phase
   one.
+* **§2b runs every vowel test over BOTH voices**, and adds one that requires
+  every formant of all ten presets to be a real **local maximum** of the
+  summed response. That is the assertion that would have caught DEVIATION 4:
+  a refitted female Eeee whose F2 had no peak at all, while the RMS error
+  said the fit was better than the one that keeps it.
 * **§2c tests the vowel selector** without needing a host: that 0 is Manual,
   that 1..5 map to the table in order, that an out-of-range value falls back
   to Manual rather than clamping, that the names match what they select, and

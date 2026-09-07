@@ -161,142 +161,185 @@ int main ()
 	}
 
 	//--------------------------------------------------------------------
-	section ("2b. All five vowel buttons land where their table says");
+	section ("2b. All ten vowel buttons land where their table says");
 	//--------------------------------------------------------------------
 	{
-		// The buttons write nine parameters each. If a preset's peaks do
-		// not come out where the table claims, the button is labelled with
-		// a vowel it does not produce - and nothing else in the plug-in
-		// would ever say so.
-		for (int v = 0; v < kVowelCount; ++v)
+		// Both voices. The female formants are higher and closer together
+		// at the top, which is exactly where a preset would stop producing
+		// its vowel if the levels were wrong - so testing only the male
+		// table would have proved nothing about half the presets.
+		for (int voice = 0; voice < kVoiceCount; ++voice)
 		{
-			const VowelPreset& vowel = kVowels[v];
-
-			Dsp dsp;
-			dsp.setSampleRate (kRate);
-			applyPatch (dsp, vowel.formants);
-			const std::vector<float> h = impulseResponse (dsp, kIR, kRate);
-
-			bool allGood = true;
-			double found[kFormantCount] = { 0.0, 0.0, 0.0 };
-			for (int k = 0; k < kFormantCount; ++k)
+			for (int v = 0; v < kVowelCount; ++v)
 			{
-				const double nominal = vowel.formants[k].freqHz;
-				double best = nominal, bestMag = 0.0;
-				for (double f = nominal * 0.88; f <= nominal * 1.12; f += 1.0)
-				{
-					const double m = responseAt (h, f, kRate);
-					if (m > bestMag) { bestMag = m; best = f; }
-				}
-				found[k] = best;
-				if (std::fabs (best - nominal) / nominal >= 0.03)
-					allGood = false;
-			}
+				const VowelPreset& vowel = vowelTable (voice)[v];
 
-			char label[128];
-			std::snprintf (label, sizeof (label),
-			               "%-5s %-18s peaks %4.0f %4.0f %4.0f Hz",
-			               vowel.name, vowel.sound, found[0], found[1], found[2]);
-			check (allGood, label);
+				Dsp dsp;
+				dsp.setSampleRate (kRate);
+				applyPatch (dsp, vowel.formants);
+				const std::vector<float> h = impulseResponse (dsp, kIR, kRate);
+
+				bool allGood = true;
+				double found[kFormantCount] = { 0.0, 0.0, 0.0 };
+				for (int k = 0; k < kFormantCount; ++k)
+				{
+					const double nominal = vowel.formants[k].freqHz;
+					double best = nominal, bestMag = 0.0;
+					for (double f = nominal * 0.94; f <= nominal * 1.06; f += 1.0)
+					{
+						const double m = responseAt (h, f, kRate);
+						if (m > bestMag) { bestMag = m; best = f; }
+					}
+					found[k] = best;
+					if (std::fabs (best - nominal) / nominal >= 0.03)
+						allGood = false;
+				}
+
+				char label[128];
+				std::snprintf (label, sizeof (label),
+				               "%-6s %-5s %-18s peaks %4.0f %4.0f %4.0f Hz",
+				               voiceName (voice), vowel.name, vowel.sound,
+				               found[0], found[1], found[2]);
+				check (allGood, label);
+			}
 		}
 	}
 
 	{
-		// Two presets that are accidentally the same - a copy-paste that
-		// was never finished - would give two buttons that sound alike and
-		// nothing would complain.
+		// EVERY FORMANT MUST BE A REAL LOCAL MAXIMUM of the summed bank,
+		// in both voices. This is not the same test as the one above,
+		// which searches a window around each nominal frequency and would
+		// happily report a neighbour's peak as this formant's.
+		//
+		// It is the assertion that would have caught the trap in
+		// ENGINEERING-NOTES DEVIATION 4: refitting the female levels
+		// against the cascade produced an Eeee whose F2 had no peak at
+		// all - it had been swallowed by F3 - while the RMS error said the
+		// fit was better than the one that keeps it.
+		bool allPresent = true;
+		int worstVoice = 0, worstVowel = 0;
+		for (int voice = 0; voice < kVoiceCount && allPresent; ++voice)
+		{
+			for (int v = 0; v < kVowelCount && allPresent; ++v)
+			{
+				const FormantSetting* f = vowelTable (voice)[v].formants;
+				for (int k = 0; k < kFormantCount; ++k)
+				{
+					// Walk 1 Hz at a time and require a turning point
+					// within 4 % of where the formant was asked for.
+					const double centre = f[k].freqHz;
+					bool peak = false;
+					for (double hz = centre * 0.96; hz <= centre * 1.04; hz += 1.0)
+					{
+						const double a = bankMagnitude (f, kFormantCount, hz - 1.0, kRate);
+						const double b = bankMagnitude (f, kFormantCount, hz,       kRate);
+						const double c = bankMagnitude (f, kFormantCount, hz + 1.0, kRate);
+						if (b > a && b >= c) { peak = true; break; }
+					}
+					if (! peak)
+					{
+						allPresent = false;
+						worstVoice = voice; worstVowel = v;
+					}
+				}
+			}
+		}
+		char label[128];
+		if (allPresent)
+			std::snprintf (label, sizeof (label),
+			               "all %d presets keep every formant as a real peak",
+			               kVoiceCount * kVowelCount);
+		else
+			std::snprintf (label, sizeof (label),
+			               "%s %s has a formant that is NOT a peak",
+			               voiceName (worstVoice), vowelTable (worstVoice)[worstVowel].name);
+		check (allPresent, label);
+	}
+
+	{
+		// Female formants are higher than male ones, every one of them -
+		// a shorter tract has no other option. A table where one had been
+		// copied from the wrong row would show up here.
+		bool higher = true;
+		double least = 1e9, most = 0.0;
+		for (int v = 0; v < kVowelCount; ++v)
+			for (int k = 0; k < kFormantCount; ++k)
+			{
+				const double m = kVowelsMale[v].formants[k].freqHz;
+				const double f = kVowelsFemale[v].formants[k].freqHz;
+				if (f <= m) higher = false;
+				least = std::min (least, f / m);
+				most  = std::max (most,  f / m);
+			}
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "every female formant is higher than its male one (%.2f to %.2f x)",
+		               least, most);
+		check (higher, label);
+
+		// And the LEVELS are shared: they are a property of the vowel, not
+		// of the voice. Asserting it keeps DEVIATION 4's decision honest.
+		bool sameLevels = true;
+		for (int v = 0; v < kVowelCount; ++v)
+			for (int k = 0; k < kFormantCount; ++k)
+				if (kVowelsMale[v].formants[k].levelDb != kVowelsFemale[v].formants[k].levelDb)
+					sameLevels = false;
+		check (sameLevels, "both voices share one level profile per vowel");
+	}
+
+	{
 		bool allDistinct = true;
 		for (int a = 0; a < kVowelCount; ++a)
 			for (int b = a + 1; b < kVowelCount; ++b)
 			{
 				bool same = true;
 				for (int k = 0; k < kFormantCount; ++k)
-					if (kVowels[a].formants[k].freqHz != kVowels[b].formants[k].freqHz)
+					if (kVowelsMale[a].formants[k].freqHz != kVowelsMale[b].formants[k].freqHz)
 						same = false;
 				if (same) allDistinct = false;
 			}
 		check (allDistinct, "no two vowels have the same formant frequencies");
 
-		// And every one is a vowel: F1 < F2 < F3. Also a static_assert in
-		// VocalFilterParams.cpp, asserted here too because this file is
-		// what someone reads to find out what is guaranteed.
 		bool ordered = true;
-		for (int v = 0; v < kVowelCount; ++v)
-			if (! (kVowels[v].formants[0].freqHz < kVowels[v].formants[1].freqHz &&
-			       kVowels[v].formants[1].freqHz < kVowels[v].formants[2].freqHz))
-				ordered = false;
-		check (ordered, "every vowel has F1 < F2 < F3");
+		for (int voice = 0; voice < kVoiceCount; ++voice)
+			for (int v = 0; v < kVowelCount; ++v)
+			{
+				const FormantSetting* f = vowelTable (voice)[v].formants;
+				if (! (f[0].freqHz < f[1].freqHz && f[1].freqHz < f[2].freqHz))
+					ordered = false;
+			}
+		check (ordered, "every vowel in both voices has F1 < F2 < F3");
 
-		// THE LEVELS MUST DIFFER BETWEEN VOWELS. A vocal tract is an
-		// all-pole filter, so amplitudes are a consequence of the
-		// frequencies, not free parameters; giving all five the same
-		// profile - which this table did until DEVIATION 2 - flattens a
-		// range F3 genuinely spans. The assertion is the shape of that
-		// range, not the individual numbers, so refitting the levels does
-		// not break it but going back to a flat profile does.
 		double loF3 = 1e9, hiF3 = -1e9;
-		bool anySameProfile = false;
 		for (int v = 0; v < kVowelCount; ++v)
 		{
-			loF3 = std::min (loF3, kVowels[v].formants[2].levelDb);
-			hiF3 = std::max (hiF3, kVowels[v].formants[2].levelDb);
-			for (int w = v + 1; w < kVowelCount; ++w)
-			{
-				bool same = true;
-				for (int k = 1; k < kFormantCount; ++k)   // F1 is pinned at 0 dB
-					if (kVowels[v].formants[k].levelDb != kVowels[w].formants[k].levelDb)
-						same = false;
-				if (same) anySameProfile = true;
-			}
+			loF3 = std::min (loF3, kVowelsMale[v].formants[2].levelDb);
+			hiF3 = std::max (hiF3, kVowelsMale[v].formants[2].levelDb);
 		}
 		char label[128];
 		std::snprintf (label, sizeof (label),
 		               "F3 level spans %.1f dB across the five vowels", hiF3 - loF3);
-		check (! anySameProfile && (hiF3 - loF3) > 20.0, label);
+		check ((hiF3 - loF3) > 20.0, label);
 
-		// F1 is the reference and stays at 0 dB in every vowel, which is
-		// what keeps the five at roughly equal loudness. The tract alone
-		// would make Eeee 11 dB quieter than Aaaa; a button that drops the
-		// mix 11 dB is not what anyone wants from an effect.
-		bool f1Pinned = true;
-		for (int v = 0; v < kVowelCount; ++v)
-			if (kVowels[v].formants[0].levelDb != 0.0)
-				f1Pinned = false;
+		bool f1Pinned = true, clearOfFloor = true;
+		for (int voice = 0; voice < kVoiceCount; ++voice)
+			for (int v = 0; v < kVowelCount; ++v)
+				for (int k = 0; k < kFormantCount; ++k)
+				{
+					const FormantSetting& f = vowelTable (voice)[v].formants[k];
+					if (k == 0 && f.levelDb != 0.0) f1Pinned = false;
+					if (f.levelDb < kLevelMinDb + 8.0) clearOfFloor = false;
+				}
 		check (f1Pinned, "F1 is pinned at 0 dB in every vowel (equal-loudness by design)");
-
-		// The back vowels must keep F3 clear of the Level parameter's own
-		// silence floor, or a small nudge switches F3 off entirely.
-		bool clearOfFloor = true;
-		for (int v = 0; v < kVowelCount; ++v)
-			for (int k = 0; k < kFormantCount; ++k)
-				if (kVowels[v].formants[k].levelDb < kLevelMinDb + 8.0)
-					clearOfFloor = false;
-		check (clearOfFloor, "no vowel sits within 8 dB of the level floor");
+		check (clearOfFloor, "no preset sits within 8 dB of the level floor");
 	}
 
 	{
-		// POLARITY. F2 is summed inverted, and that is load-bearing: it is
-		// what puts the region BETWEEN two formants where an all-pole
-		// tract puts it. If it is ever dropped, the peaks stay exactly
-		// where they are and only the valleys move, so nothing else in
-		// this suite would notice - hence a test that looks at a valley.
-		//
-		// Summed IN PHASE the two branches are half a turn apart between
-		// the formants and cancel, digging a spurious null a real tract
-		// does not have; inverting F2 fills it in. The first version of
-		// this test asserted the opposite - that inverting DEEPENED the
-		// valley - and failed, which is how the direction got settled.
 		Dsp dsp;
 		dsp.setSampleRate (kRate);
 		applyPatch (dsp, kAaaFormants);
 		const std::vector<float> h = impulseResponse (dsp, kIR, kRate);
 
-		// Compute BOTH candidate curves from the shared response function -
-		// the bank as it is summed, and the same bank summed in phase -
-		// and require the running filter to match the first and not the
-		// second. No threshold picked by hand: the test discriminates
-		// between two concrete alternatives, and prints how far apart they
-		// are so a reader can see it had something to discriminate.
 		auto valleyOf = [&] (bool invertF2)
 		{
 			double lowest = 1e9;
@@ -334,13 +377,10 @@ int main ()
 		std::snprintf (label, sizeof (label),
 		               "F1-F2 valley at %.0f Hz: inverted %.1f dB, in phase %.1f dB, got %.1f",
 		               at, db (inverted), db (inPhase), db (measured));
-		// The two must actually differ, or this proves nothing...
 		const bool discriminates = std::fabs (db (inverted) - db (inPhase)) > 3.0;
-		// ...and the running filter must be the inverted one.
 		const bool matches = std::fabs (db (measured) - db (inverted)) < 0.5;
 		check (discriminates && matches, label);
 
-		// And the constant that makes it happen is the one that says so.
 		check (kFormantPolarity[0] > 0.0 && kFormantPolarity[1] < 0.0 &&
 		       kFormantPolarity[2] > 0.0, "polarity is + - +");
 	}
@@ -352,31 +392,39 @@ int main ()
 		// The selector's mapping lives in this SDK-free layer precisely so
 		// it can be tested here rather than only inside a processor that
 		// needs a host to run.
-		check (vowelSelection (kVowelManual) == nullptr,
+		check (vowelSelection (kVowelManual, kVoiceMale) == nullptr,
 		       "selector 0 is Manual - the nine parameters, not a preset");
 
 		bool mapped = true;
 		for (int v = 1; v <= kVowelCount; ++v)
 		{
-			const FormantSetting* got = vowelSelection (v);
-			if (got != kVowels[v - 1].formants)
-				mapped = false;
+			for (int voice = 0; voice < kVoiceCount; ++voice)
+				if (vowelSelection (v, voice) != vowelTable (voice)[v - 1].formants)
+					mapped = false;
 		}
 		check (mapped, "selectors 1..5 map to Aaaa..Uuuu in table order");
 
 		// An out-of-range selector must be MANUAL, not a crash and not a
 		// silently clamped preset. A host is free to send anything, and a
 		// saved project from a future version with more vowels will.
-		check (vowelSelection (-1) == nullptr &&
-		       vowelSelection (kVowelCount + 1) == nullptr &&
-		       vowelSelection (9999) == nullptr,
+		check (vowelSelection (-1, kVoiceMale) == nullptr &&
+		       vowelSelection (kVowelCount + 1, kVoiceMale) == nullptr &&
+		       vowelSelection (9999, kVoiceFemale) == nullptr,
 		       "an out-of-range selector falls back to Manual");
+
+		// An out-of-range VOICE must land on male rather than read past
+		// the table - a host may send anything, and so may an old project.
+		check (vowelTable (-1) == kVowelsMale && vowelTable (7) == kVowelsMale,
+		       "an out-of-range voice falls back to male");
+		check (std::string (voiceName (kVoiceMale)) == "Male" &&
+		       std::string (voiceName (kVoiceFemale)) == "Female",
+		       "the two voices are named Male and Female");
 
 		// The names the host's parameter list shows must line up with the
 		// presets they select, or the list is lying about what it does.
 		bool named = (std::string (vowelSelectionName (kVowelManual)) == "Manual");
 		for (int v = 1; v <= kVowelCount; ++v)
-			if (std::string (vowelSelectionName (v)) != kVowels[v - 1].name)
+			if (std::string (vowelSelectionName (v)) != kVowelsMale[v - 1].name)
 				named = false;
 		check (named, "every selector position is named after the vowel it selects");
 
@@ -391,10 +439,10 @@ int main ()
 		Dsp dsp;
 		dsp.setSampleRate (kRate);
 		dsp.setGlideMs (150.0);
-		applyPatch (dsp, vowelSelection (5));      // Uuuu
+		applyPatch (dsp, vowelSelection (5, kVoiceMale));      // Uuuu
 		dsp.reset ();
 
-		const FormantSetting* target = vowelSelection (2);   // Eeee
+		const FormantSetting* target = vowelSelection (2, kVoiceMale);   // Eeee
 		for (int k = 0; k < kFormantCount; ++k)
 			dsp.setFormant (k, target[k].freqHz, target[k].bandwidthHz, target[k].levelDb);
 
@@ -692,12 +740,12 @@ int main ()
 			Dsp dsp;
 			dsp.setSampleRate (kRate);
 			dsp.setGlideMs (glideMs);
-			applyPatch (dsp, kVowels[4].formants);      // Uuuu
+			applyPatch (dsp, kVowelsMale[4].formants);      // Uuuu
 			dsp.reset ();
 
 			// Aim at Eeee, then walk one sample at a time and note when
 			// each of the nine stops moving.
-			applyPatch (dsp, kVowels[1].formants);      // Eeee
+			applyPatch (dsp, kVowelsMale[1].formants);      // Eeee
 
 			const int expected = static_cast<int> (
 				std::max (glideMs, kGlideFloorMs) * 0.001 * kRate + 0.5);
@@ -712,9 +760,9 @@ int main ()
 				dsp.process (&in, &in, &outL, &outR, 1);
 				for (int k = 0; k < kFormantCount; ++k)
 				{
-					const double want[3] = { kVowels[1].formants[k].freqHz,
-					                         kVowels[1].formants[k].bandwidthHz,
-					                         dbToLinear (kVowels[1].formants[k].levelDb,
+					const double want[3] = { kVowelsMale[1].formants[k].freqHz,
+					                         kVowelsMale[1].formants[k].bandwidthHz,
+					                         dbToLinear (kVowelsMale[1].formants[k].levelDb,
 					                                     kLevelMinDb) };
 					const double have[3] = { dsp.formantFreq (k),
 					                         dsp.formantBandwidth (k),
@@ -735,12 +783,12 @@ int main ()
 			int first = -1, movers = 0;
 			for (int k = 0; k < kFormantCount; ++k)
 			{
-				const double from[3] = { kVowels[4].formants[k].freqHz,
-				                         kVowels[4].formants[k].bandwidthHz,
-				                         kVowels[4].formants[k].levelDb };
-				const double to[3]   = { kVowels[1].formants[k].freqHz,
-				                         kVowels[1].formants[k].bandwidthHz,
-				                         kVowels[1].formants[k].levelDb };
+				const double from[3] = { kVowelsMale[4].formants[k].freqHz,
+				                         kVowelsMale[4].formants[k].bandwidthHz,
+				                         kVowelsMale[4].formants[k].levelDb };
+				const double to[3]   = { kVowelsMale[1].formants[k].freqHz,
+				                         kVowelsMale[1].formants[k].bandwidthHz,
+				                         kVowelsMale[1].formants[k].levelDb };
 				for (int j = 0; j < 3; ++j)
 				{
 					if (from[j] == to[j])
@@ -766,10 +814,10 @@ int main ()
 		double most = 0.0, least = 1e30;
 		for (int k = 0; k < kFormantCount; ++k)
 		{
-			const double df = std::fabs (kVowels[1].formants[k].freqHz
-			                           - kVowels[4].formants[k].freqHz);
-			const double dw = std::fabs (kVowels[1].formants[k].bandwidthHz
-			                           - kVowels[4].formants[k].bandwidthHz);
+			const double df = std::fabs (kVowelsMale[1].formants[k].freqHz
+			                           - kVowelsMale[4].formants[k].freqHz);
+			const double dw = std::fabs (kVowelsMale[1].formants[k].bandwidthHz
+			                           - kVowelsMale[4].formants[k].bandwidthHz);
 			for (double d : { df, dw })
 				if (d > 0.0) { most = std::max (most, d); least = std::min (least, d); }
 		}
@@ -789,13 +837,13 @@ int main ()
 		for (Dsp* d : { &a, &b })
 		{
 			d->setSampleRate (kRate);
-			applyPatch (*d, kVowels[4].formants);
+			applyPatch (*d, kVowelsMale[4].formants);
 			d->reset ();
 		}
 		a.setGlideMs (0.0);
 		b.setGlideMs (kGlideFloorMs);
-		applyPatch (a, kVowels[1].formants);
-		applyPatch (b, kVowels[1].formants);
+		applyPatch (a, kVowelsMale[1].formants);
+		applyPatch (b, kVowelsMale[1].formants);
 
 		float in = 0.0f, oL = 0.0f, oR = 0.0f;
 		int stepsA = 0, stepsB = 0;
@@ -830,12 +878,12 @@ int main ()
 			Dsp dsp;
 			dsp.setSampleRate (kRate);
 			dsp.setGlideMs (kGlideFloorMs);
-			applyPatch (dsp, kVowels[4].formants);       // Uuuu
+			applyPatch (dsp, kVowelsMale[4].formants);       // Uuuu
 			dsp.reset ();
 
 			// Settle, change vowel, then run through the transition.
 			dsp.process (in.data (), in.data (), outL.data (), outR.data (), transition);
-			applyPatch (dsp, kVowels[1].formants);       // Eeee
+			applyPatch (dsp, kVowelsMale[1].formants);       // Eeee
 			if (snapInstead)
 				dsp.snapParameters ();
 			dsp.process (in.data () + transition, in.data () + transition,
