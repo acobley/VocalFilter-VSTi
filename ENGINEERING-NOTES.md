@@ -509,6 +509,46 @@ If a switch ever misbehaves like this again and the invalidate is present, the
 next suspect is the thread — VST3 documents the controller as UI-thread, and
 `invalid()` from anywhere else is not safe.
 
+### NOT A BUG — a voice change glides, it just moves a seventh as far
+
+**Reported:** the Glide slider seemed to have no effect on a male/female
+change, while still working on a vowel change.
+
+Both go through the same `setFormant`, so there was no obvious asymmetry to
+find, and measuring found none either. Checked at both layers:
+
+* **The DSP.** Male Aaaa → female Aaaa and male Aaaa → male Eeee both settle
+  in exactly 22050 samples at a 500 ms glide, and both land exactly on target.
+  Every vowel, male → female, does the same.
+* **The seam above it.** The processor turns a normalised value into a voice
+  index and then a table pointer. Every value from 0.0 to 1.0 in hundredths
+  lands on a valid table, both tables are reachable, and 0 is male.
+
+What differs is **how far the formants travel**:
+
+| | ΔF2 | in semitones |
+|---|---|---|
+| Vowel, male Aaaa → male Eeee | +1200 Hz | **+12.9** |
+| Voice, male Aaaa → female Aaaa | +130 Hz | **+2.0** |
+| Vowel, male Oooo → male Eeee | +1390 Hz | **+16.2** |
+| Voice, male Oooo → female Oooo | +95 Hz | **+1.7** |
+
+Across the table a vowel change moves F2 by up to **16.8 semitones** and a
+voice change by at most **3.8**. Same duration, a sweep a quarter to a seventh
+the distance — which reads as instant next to the other one. A shorter tract
+is a modest, uniform shift; a different vowel is a different articulation.
+
+Two tests now pin this, because a voice glide that silently broke would look
+exactly like the small move it legitimately is: every vowel's male → female
+transition is asserted to take the full glide and land, and the semitone
+figures above are asserted directly.
+
+**To tell the two apart by eye**: set Glide to 2000 ms and flip Voice while
+watching the response display. It follows the *gliding* values, so the curve
+should visibly crawl for two seconds. If it jumps, the glide really has
+broken; if it crawls, what you are hearing is a two-semitone move and there is
+nothing to fix.
+
 ### 2c. The Vowel selector — a mode, acted on by the PROCESSOR
 
 `Vowel` is a six-position enumerated parameter: Manual, then the five
@@ -967,7 +1007,7 @@ c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
     -o /tmp/paramstests && /tmp/paramstests
 ```
 
-Sixty-one DSP assertions and twenty parameter assertions, all passing. The ones worth knowing about:
+Sixty-seven DSP assertions and twenty-four parameter assertions, all passing. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught

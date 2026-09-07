@@ -166,6 +166,7 @@ void VocalFilterProcessor::pushParameters ()
 	// normalised values, so nothing in VocalFilterDsp has to know what a
 	// ParamID is or what range a host chose to present. The table is the
 	// only place the two representations meet.
+	//
 	// GLIDE FIRST. setFormant reads the glide length when it starts a
 	// ramp, so a block that changes both the glide time and a vowel must
 	// have the new length in hand before the vowel is pushed - otherwise

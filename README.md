@@ -149,7 +149,7 @@ c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
     -o /tmp/paramstests && /tmp/paramstests
 ```
 
-81 assertions between them. They measure rather than assume: where the formant peaks
+91 assertions between them. They measure rather than assume: where the formant peaks
 actually land, that the running filter matches the curve the display draws,
 that the −3 dB width is the width that was asked for, that the response is
 unchanged from 44.1 k to 192 k, that every glide setting lands on the right

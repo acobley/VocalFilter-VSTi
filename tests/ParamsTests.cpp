@@ -196,7 +196,38 @@ int main ()
 	}
 
 	//--------------------------------------------------------------------
-	section ("5. What gets saved");
+	section ("5. The seam the processor crosses for Voice");
+	//--------------------------------------------------------------------
+	{
+		// The processor turns a normalised value into a voice index and
+		// then into a table pointer. Every normalised value a host can
+		// send has to land on one of the two tables, and both have to be
+		// reachable - a conversion that always returned male would present
+		// as "the switch does nothing", which is a real report this
+		// plug-in has already had once for a different reason.
+		bool male = false, female = false, allValid = true;
+		for (int i = 0; i <= 100; ++i)
+		{
+			const double n = i / 100.0;
+			const int voice = static_cast<int> (kParams[kVoice].toInternal (n) + 0.5);
+			if (voice == kVoiceMale) male = true;
+			else if (voice == kVoiceFemale) female = true;
+			else allValid = false;
+
+			if (vowelSelection (1, voice) == nullptr) allValid = false;
+		}
+		check (allValid, "every normalised value maps to a valid voice and table");
+		check (male && female, "both tables are reachable from a host's range");
+
+		check (vowelSelection (1, kVoiceMale) != vowelSelection (1, kVoiceFemale),
+		       "the two voices really are different tables");
+		check (static_cast<int> (kParams[kVoice].toInternal (0.0) + 0.5) == kVoiceMale &&
+		       static_cast<int> (kParams[kVoice].toInternal (1.0) + 0.5) == kVoiceFemale,
+		       "0 is male and 1 is female, the way round the names say");
+	}
+
+	//--------------------------------------------------------------------
+	section ("6. What gets saved");
 	//--------------------------------------------------------------------
 	{
 		check (kNumStoredParams == kLiveBase,

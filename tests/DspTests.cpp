@@ -808,6 +808,70 @@ int main ()
 	}
 
 	{
+		// A VOICE change must glide exactly as a vowel change does. They
+		// go through the same setFormant, so this looks redundant - and it
+		// is not, because the two are reported differently by ear: a vowel
+		// change sweeps F2 about an octave and a voice change moves it two
+		// semitones, so a voice glide that had silently broken would just
+		// sound like the small move it is.
+		for (int v = 0; v < kVowelCount; ++v)
+		{
+			Dsp dsp;
+			dsp.setSampleRate (kRate);
+			dsp.setGlideMs (500.0);
+			applyPatch (dsp, kVowelsMale[v].formants);
+			dsp.reset ();
+
+			applyPatch (dsp, kVowelsFemale[v].formants);
+
+			const int expected = static_cast<int> (500.0 * 0.001 * kRate + 0.5);
+			float in = 0.0f, oL = 0.0f, oR = 0.0f;
+			int n = 0;
+			while (dsp.gliding () && n < expected * 4)
+			{
+				dsp.process (&in, &in, &oL, &oR, 1);
+				++n;
+			}
+
+			bool landed = true;
+			for (int k = 0; k < kFormantCount; ++k)
+				if (dsp.formantFreq (k) != kVowelsFemale[v].formants[k].freqHz ||
+				    dsp.formantBandwidth (k) != kVowelsFemale[v].formants[k].bandwidthHz)
+					landed = false;
+
+			char label[128];
+			std::snprintf (label, sizeof (label),
+			               "%s male -> female glides %d samples and lands",
+			               kVowelsMale[v].name, n);
+			check (n == expected && landed, label);
+		}
+	}
+
+	{
+		// The reason a working voice glide is easy to mistake for a broken
+		// one, stated as a number so nobody has to take it on trust.
+		double worstVowel = 0.0, worstVoice = 0.0;
+		for (int v = 0; v < kVowelCount; ++v)
+		{
+			const double voiceSt = std::fabs (12.0 * std::log2 (
+				kVowelsFemale[v].formants[1].freqHz / kVowelsMale[v].formants[1].freqHz));
+			worstVoice = std::max (worstVoice, voiceSt);
+			for (int w = 0; w < kVowelCount; ++w)
+				if (w != v)
+				{
+					const double st = std::fabs (12.0 * std::log2 (
+						kVowelsMale[w].formants[1].freqHz / kVowelsMale[v].formants[1].freqHz));
+					worstVowel = std::max (worstVowel, st);
+				}
+		}
+		char label[128];
+		std::snprintf (label, sizeof (label),
+		               "a voice change moves F2 at most %.1f semitones, a vowel change up to %.1f",
+		               worstVoice, worstVowel);
+		check (worstVowel > worstVoice * 3.0, label);
+	}
+
+	{
 		// And the distances really were different - otherwise the test
 		// above proves nothing. Uuuu -> Eeee, in the units each ramp runs
 		// in.
