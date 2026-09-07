@@ -16,7 +16,7 @@
 <p class="sub">Three bandpass resonators in parallel per channel. Drawn from <code>Dsp::process</code> and <code>VocalFilterProcessor::pushParameters</code>. The two channels are identical and share coefficients; only their filter state differs, so one is drawn.</p>
 
 <svg viewBox="0 0 1240 720" width="1240" height="720" role="img"
-     aria-label="Signal flow diagram. A control plane along the top takes either the vowel preset table or the nine formant parameters, selected by the Vowel mode, through glide ramps into biquad coefficients, which feed a parallel bank of three bandpass filters. The audio input splits into that bank and a dry path; the bank's three outputs are scaled and summed, with F2 inverted, then crossfaded against dry and scaled by output trim. A dashed tap carries the live formant values out through read-only parameters to the controller and the response display.">
+     aria-label="Signal flow diagram. A control plane along the top takes either a vowel preset - from the male or female table, chosen by the Voice switch - or the nine formant parameters, selected by the Vowel mode, through glide ramps into biquad coefficients, which feed a parallel bank of three bandpass filters. The audio input splits into that bank and a dry path; the bank's three outputs are scaled and summed, with F2 inverted, then crossfaded against dry and scaled by output trim. A dashed tap carries the live formant values out through read-only parameters to the controller and the response display.">
   <defs>
     <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,1 L9,5 L0,9 z" fill="#2f6296"/>
@@ -50,11 +50,16 @@
   </defs>
 
   <!-- ==================== CONTROL PLANE ==================== -->
-  <text class="lane" x="30" y="38" fill="#8a6410">CONTROL — what the filters are told to be</text>
+  <text class="lane" x="430" y="38" fill="#8a6410">CONTROL — what the filters are told to be</text>
 
-  <rect class="bx ctl" x="30" y="58" width="175" height="46"/>
-  <text class="t" x="117" y="78" text-anchor="middle">Vowel table</text>
-  <text class="s" x="117" y="94" text-anchor="middle">Aaaa Eeee Iiii Oooo Uuuu</text>
+  <rect class="bx ctl" x="30" y="18" width="175" height="32"/>
+  <text class="t" x="117" y="38" text-anchor="middle">Voice</text>
+
+  <rect class="bx ctl" x="30" y="60" width="175" height="46"/>
+  <text class="t" x="117" y="80" text-anchor="middle">Vowel tables</text>
+  <text class="s" x="117" y="96" text-anchor="middle">male · female, five each</text>
+  <path class="wc" d="M117,50 V60" marker-end="url(#ac)"/>
+  <text class="note" x="212" y="42" text-anchor="start">picks the table</text>
 
   <rect class="bx ctl" x="30" y="118" width="175" height="46"/>
   <text class="t" x="117" y="138" text-anchor="middle">Nine parameters</text>
@@ -63,7 +68,7 @@
   <rect class="bx ctl" x="240" y="88" width="155" height="46"/>
   <text class="t" x="317" y="108" text-anchor="middle">Vowel</text>
   <text class="s" x="317" y="124" text-anchor="middle">a MODE, not a recall</text>
-  <path class="wc" d="M205,81 H222 V104 H240" marker-end="url(#ac)"/>
+  <path class="wc" d="M205,83 H222 V104 H240" marker-end="url(#ac)"/>
   <path class="wc" d="M205,141 H222 V118 H240" marker-end="url(#ac)"/>
   <text class="note" x="317" y="152" text-anchor="middle">on a preset, the nine are ignored</text>
 
@@ -179,8 +184,9 @@
   </div>
   <div>
     <h2>Vowel is a mode, not a recall</h2>
-    <p>While it is on a preset the DSP takes that vowel's nine values and the nine parameters are <em>ignored</em>. The processor reads it, not the controller, so it works with the editor closed, offline and under automation.</p>
+    <p>While it is on a preset the DSP takes that vowel's nine values and the nine parameters are <em>ignored</em>. The processor reads it, not the controller, so it works with the editor closed, offline and under automation. <strong>Voice</strong> picks which of the two tables that preset comes from, and is read the same way.</p>
     <p>Touching a formant slider captures the preset's values into the parameters and switches back to Manual, so nothing jumps.</p>
+    <p>A <em>voice</em> change glides exactly as a <em>vowel</em> change does — it just moves F2 by at most 3.8 semitones against up to 16.8, so it sounds far less dramatic for the same Glide time.</p>
   </div>
   <div>
     <h2>The display reads published values</h2>

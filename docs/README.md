@@ -27,6 +27,9 @@ PY
 Blue is audio, amber is control — what the filters are *told* to be — and
 grey dashed is observation. **Nothing drawn dashed is in the audio path.**
 
+Regenerate it after any change to the routing: the HTML is hand-authored and
+the PNG is rendered from it, so the two only stay in step deliberately.
+
 It is worth having because three things about this plug-in are easier to see
 than to read:
 
@@ -37,7 +40,10 @@ than to read:
   valley.
 * **Vowel is a mode, not a recall.** On a preset the DSP takes that vowel's
   nine values and the nine parameters are ignored. The processor reads it, not
-  the controller, which is what makes it work with the editor closed.
+  the controller, which is what makes it work with the editor closed. **Voice**
+  picks which of the two tables that preset comes from and is read the same
+  way — which is why it appears in the control plane rather than beside the
+  filters.
 * **The display reads published values, not parameters.** The nine read-only
   hidden parameters exist because a message sent from `process()` is silently
   discarded by the host's connection proxy.
