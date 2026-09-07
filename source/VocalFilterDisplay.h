@@ -49,12 +49,21 @@ public:
 	CLASS_METHODS (SpyResponseDisplay, VSTGUI::CView)
 
 	/** The axes. 80 Hz to 8 kHz covers every formant in the table with
-	    room either side; +12 to -48 dB covers the Level range plus the
-	    headroom a peak can reach. */
+	    room either side; +12 dB is the headroom a peak can reach.
+
+	    The floor is -66 dB, not the -48 it started at, because the SUM is
+	    drawn as well as the components and a parallel bank cancels. Where
+	    two formants meet in antiphase the sum digs a notch far below any
+	    single skirt: measured over the whole preset table the deepest is
+	    -61.5 dB (female Aaaa, near 2 kHz), and five of the ten presets go
+	    past -48. At the old floor those troughs ran off the bottom, and
+	    what was left on screen - the small rise BETWEEN two notches - read
+	    as the curve turning round and coming back up. -66 puts every
+	    preset's trough on the scale, and keeps the 12 dB grid spacing. */
 	static constexpr double kMinHz  =    80.0;
 	static constexpr double kMaxHz  =  8000.0;
 	static constexpr double kMaxDb  =    12.0;
-	static constexpr double kMinDb  =   -48.0;
+	static constexpr double kMinDb  =   -66.0;
 
 private:
 	VSTGUI::CCoord xOf (double hz, const VSTGUI::CRect& plot) const;

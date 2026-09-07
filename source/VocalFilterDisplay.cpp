@@ -44,7 +44,7 @@ const CColor kCaption    (255, 255, 255, 200);
 
 /** Grid lines, and which of them are labelled. */
 constexpr double kDecades[] = { 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0 };
-constexpr double kDbLines[] = { 0.0, -12.0, -24.0, -36.0 };
+constexpr double kDbLines[] = { 0.0, -12.0, -24.0, -36.0, -48.0, -60.0 };
 
 /** Points across the plot. One per pixel would be wasteful on a wide panel
     and jagged on a narrow one; a fixed count keeps the curve smooth and
@@ -140,9 +140,36 @@ void SpyResponseDisplay::drawPolyline (CDrawContext* context, const CRect& plot,
 	// A curve is BROKEN where it falls off the bottom of the scale rather
 	// than clamped to it. Clamping draws a flat line along the floor, which
 	// reads as a filter doing something quiet across the whole spectrum;
-	// F3 at -26.8 dB in the Aaa patch has skirts below -48 for most of the
-	// width and looked exactly like that.
+	// F3 at -26.8 dB in the Aaa patch has skirts below the floor for most
+	// of the width and looked exactly like that.
+	//
+	// But the break is taken TO THE EDGE, not to the last point that
+	// happened to be on the scale. The samples are 240 across six and a
+	// half octaves, so beside a notch one sample can sit 15 dB above the
+	// floor and the next 10 dB below it: simply dropping the second ended
+	// the line in clear air, well up the plot, and started the next piece
+	// the same way. A trough between two notches then appeared as an arc
+	// floating in the middle of the display with nothing joining it to
+	// anything - which is what it looks like when a curve turns round and
+	// comes back up. Interpolating the crossing makes the line run down to
+	// the bottom edge and reappear from it, so leaving the scale looks
+	// like leaving the scale.
+	const auto pointAt = [&] (double hz, double decibels)
+	{ return CPoint (xOf (hz, plot), yOf (decibels, plot)); };
+
+	// Where the segment between two samples crosses kMinDb. Linear in dB
+	// against log frequency, which is what the plot's own axes are.
+	const auto crossing = [&] (double hzA, double dbA, double hzB, double dbB)
+	{
+		const double span = dbA - dbB;
+		const double f = (span > 1e-12) ? (dbA - kMinDb) / span : 0.0;
+		const double t = std::min (1.0, std::max (0.0, f));
+		return pointAt (hzA * std::pow (hzB / hzA, t), kMinDb);
+	};
+
 	bool drawing = false;
+	double prevHz = 0.0, prevDb = 0.0;
+
 	for (int i = 0; i < kPoints; ++i)
 	{
 		const double t = i / static_cast<double> (kPoints - 1);
@@ -151,20 +178,30 @@ void SpyResponseDisplay::drawPolyline (CDrawContext* context, const CRect& plot,
 
 		if (decibels < kMinDb)
 		{
-			drawing = false;
-			continue;
+			if (drawing)
+			{
+				path->addLine (crossing (prevHz, prevDb, hz, decibels));
+				drawing = false;
+			}
 		}
-
-		const CPoint p (xOf (hz, plot), yOf (decibels, plot));
-		if (! drawing)
+		else if (! drawing)
 		{
-			path->beginSubpath (p);
+			if (i > 0)
+				path->beginSubpath (crossing (hz, decibels, prevHz, prevDb));
+			else
+				path->beginSubpath (pointAt (hz, decibels));
+
+			if (i > 0)
+				path->addLine (pointAt (hz, decibels));
 			drawing = true;
 		}
 		else
 		{
-			path->addLine (p);
+			path->addLine (pointAt (hz, decibels));
 		}
+
+		prevHz = hz;
+		prevDb = decibels;
 	}
 
 	context->drawGraphicsPath (path, CDrawContext::kPathStroked);

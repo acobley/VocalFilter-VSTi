@@ -52,18 +52,51 @@ def vowel_names(path):
     return re.findall(r'\{\s*"([^"]+)"\s*,\s*"([^"]+)"', block)
 
 
-def vowel_table(path, which):
-    """The five (freq, bandwidth, level) triples of one voice's table."""
+ROW_RE = re.compile(
+    r'\{\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\}'
+    r'|(k\w+)\s*\[\s*(\d+)\s*\]')
+
+
+def formant_array(path, name):
+    """The rows of a named `constexpr FormantSetting k...[]` array."""
+    text = open(path, encoding='utf-8').read()
+    block = text[text.index('constexpr FormantSetting ' + name):]
+    block = block[:block.index('};')]
+    return [tuple(float(v) for v in row)
+            for row in re.findall(
+                r'\{\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*\}',
+                block)]
+
+
+def vowel_table(path, which, vowels, formants):
+    """Each vowel's (freq, bandwidth, level) triples, for one voice's table.
+
+    An entry may NAME a shared array - `{ kAaaFormants[0], ... }` - instead of
+    writing its numbers out, so references are resolved rather than skipped.
+    Skipping one used to shift every later vowel up a row, which drew the
+    WRONG vowel's numbers under a lit button without any complaint; the counts
+    are asserted so that a table this cannot read fails loudly instead.
+    """
     text = open(path, encoding='utf-8').read()
     block = text[text.index('constexpr VowelPreset kVowels' + which):]
     block = block[:block.index('};')]
-    rows = re.findall(
-        r'\{\s*([-\d.]+),\s*([-\d.]+),\s*([-\d.]+)\s*\}', block)
-    out, cur = [], []
-    for a, b, c in rows:
-        cur.append((float(a), float(b), float(c)))
-        if len(cur) == 3:
-            out.append(cur); cur = []
+    entries = re.split(r'\{\s*"[^"]+"\s*,', block)[1:]
+    if len(entries) != vowels:
+        raise SystemExit(f'kVowels{which}: read {len(entries)} entries, '
+                         f'expected kVowelCount = {vowels}')
+    out = []
+    for name, entry in zip(vowel_names(path), entries):
+        rows = []
+        for m in ROW_RE.finditer(entry):
+            if m.group(4):
+                rows.append(formant_array(path, m.group(4))[int(m.group(5))])
+            else:
+                rows.append(tuple(float(m.group(i)) for i in (1, 2, 3)))
+        if len(rows) != formants:
+            raise SystemExit(
+                f'kVowels{which} {name[0]}: read {len(rows)} formants, '
+                f'expected kFormantCount = {formants}')
+        out.append(rows)
     return out
 
 
@@ -169,7 +202,8 @@ for c, head in enumerate(('F1', 'F2', 'F3')):
             env['kHeadingTop'] + env['kHeadingHeight'], LABEL)
 
 # the grid, showing the Aaa patch
-TABLE = vowel_table(DSP, 'Female' if VOICE else 'Male')
+TABLE = vowel_table(DSP, 'Female' if VOICE else 'Male',
+                    env['kVowelCount'], env['kFormantCount'])
 SHOWN = TABLE[max(SELECTED - 1, 0)]
 AAA = [(f'{f:.0f} Hz', f'{b:.0f} Hz', f'{l:.1f} dB') for f, b, l in SHOWN]
 for c in range(3):
@@ -187,7 +221,7 @@ for c in range(3):
 # collides and that the legend is readable.
 # ---------------------------------------------------------------------------
 TRACE = ((255, 214, 64), (72, 226, 86), (96, 160, 255))
-MIN_HZ, MAX_HZ, MAX_DB, MIN_DB = 80.0, 8000.0, 12.0, -48.0
+MIN_HZ, MAX_HZ, MAX_DB, MIN_DB = 80.0, 8000.0, 12.0, -66.0
 FS = 44100.0
 
 
@@ -240,7 +274,7 @@ def y_of(v):
 for hz in (100, 200, 500, 1000, 2000, 5000):
     g = 90 if hz in (100, 1000) else 60
     d.line([x_of(hz) * SCALE, py0 * SCALE, x_of(hz) * SCALE, py1 * SCALE], fill=(g, g, g))
-for v in (0, -12, -24, -36):
+for v in (0, -12, -24, -36, -48, -60):
     g = 90 if v == 0 else 60
     d.line([px0 * SCALE, y_of(v) * SCALE, px1 * SCALE, y_of(v) * SCALE], fill=(g, g, g))
 
@@ -259,17 +293,34 @@ POLARITY = (1.0, -1.0, 1.0)
 
 
 def broken_line(sampler, colour, width):
-    run = []
+    """As drawPolyline draws it: broken where it leaves the bottom of the
+    scale, but taken TO the bottom edge by interpolating the crossing, so an
+    excursion off the scale cannot be mistaken for the curve turning back up.
+    """
+    def point(hz, v):
+        return (x_of(hz) * SCALE, y_of(v) * SCALE)
+
+    def crossing(hz_a, db_a, hz_b, db_b):
+        span = db_a - db_b
+        f = (db_a - MIN_DB) / span if span > 1e-12 else 0.0
+        return point(hz_a * (hz_b / hz_a) ** min(1.0, max(0.0, f)), MIN_DB)
+
+    run, prev = [], None
     for i in range(240):
         t = i / 239.0
         hz = MIN_HZ * (MAX_HZ / MIN_HZ) ** t
         v = sampler(hz)
         if v < MIN_DB:
-            if len(run) > 1:
-                d.line(run, fill=colour, width=width)
-            run = []
-            continue
-        run.append((x_of(hz) * SCALE, y_of(v) * SCALE))
+            if run:
+                run.append(crossing(prev[0], prev[1], hz, v))
+                if len(run) > 1:
+                    d.line(run, fill=colour, width=width)
+                run = []
+        else:
+            if not run and prev is not None:
+                run.append(crossing(hz, v, prev[0], prev[1]))
+            run.append(point(hz, v))
+        prev = (hz, v)
     if len(run) > 1:
         d.line(run, fill=colour, width=width)
 

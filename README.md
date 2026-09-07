@@ -102,7 +102,10 @@ moves F2 by at most 3.8 semitones against up to 16.8, so the same Glide time
 sounds far less dramatic.
 
 The display draws each formant's response — F1 yellow, F2 green, F3 blue — and
-the summed response in white, following the DSP in real time as it glides.
+the summed response in white, following the DSP in real time as it glides. The
+axis is fixed at 80 Hz – 8 kHz and +12 to −66 dB so two vowels can be
+compared; the floor is that low because three resonators summed with
+alternating polarity notch far deeper than any of them does alone.
 
 ## Building
 

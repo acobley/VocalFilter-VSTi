@@ -60,11 +60,19 @@ not host automation.
 
 The editor's layout, drawn by `tools/render-panel.py`. Not screenshots and not
 mock-ups: the script **parses the layout constants out of
-`source/VocalFilterEditor.h`** and the vowel names out of
+`source/VocalFilterEditor.h`** and the vowel names and formant tables out of
 `source/VocalFilterDsp.h` and evaluates them in declaration order, so a
 control in the wrong place here is in the wrong place in the plug-in. If a
 constant ever becomes an expression the script cannot evaluate, it fails
 loudly rather than drawing a layout that is not the one that will ship.
+
+It also checks that it read `kVowelCount` entries of `kFormantCount` formants
+each, and stops if it did not. That check exists because it once did not:
+the male Aaaa entry names a shared array rather than writing its numbers out,
+the row regex skipped it, every later vowel shifted up one, and these two
+files sat in the repository with the **Aaaa button lit over Eeee's numbers**.
+A partial parse looks exactly like a successful one — same layout, same count
+of readouts, wrong values — so the counts are asserted rather than trusted.
 
 ```sh
 python3 tools/render-panel.py                           # Manual, male: no button lit
@@ -83,9 +91,14 @@ resolve about 11 px apart on the 288 px plot, and narrowing the axis from
 vowel button lit, which is what the Vowel parameter looks like on a preset
 whether it got there from a click or from automation.
 
-Looking at these caught two faults that reading the code had not: F3's skirts
-drew a flat line along the bottom of the response display instead of ending,
-and the legend ran off the plate when "Sum" was added to it.
+Looking at these caught three faults that reading the code had not: F3's
+skirts drew a flat line along the bottom of the response display instead of
+ending; the legend ran off the plate when "Sum" was added to it; and the sum,
+where it dived past the old −48 dB floor, left an arc floating in mid-plot
+that read as the curve turning back up. The display's floor is now −66 dB —
+below every preset's deepest notch, the worst being female Aaaa at −61.5 —
+and a curve that does leave the scale is drawn down to the bottom edge rather
+than stopping at the last sample that happened to be on it.
 
 The response curves in `render-panel.py` are a **re-implementation** of
 `bandpassMagnitude` for the mock — the real one is in `VocalFilterDsp.cpp` and

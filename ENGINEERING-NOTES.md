@@ -859,7 +859,7 @@ hides the colour completely and "F1 yellow" stops being true where it matters
 most. Letting the trace underneath tint it turns the collision into
 information: white over yellow means F1 *is* the response there.
 
-The axis is 80 Hz – 8 kHz and +12 to −48 dB, fixed rather than auto-scaling,
+The axis is 80 Hz – 8 kHz and +12 to −66 dB, fixed rather than auto-scaling,
 so two vowels can be compared. Log frequency because a linear axis spends two
 thirds of its width above 3 kHz, where nothing in this plug-in lives, and
 squeezes F1 and F2 — the two that decide which vowel you hear — into a
@@ -878,8 +878,36 @@ slightly different pieces of code.
 **A curve is broken where it falls off the bottom of the scale**, not clamped
 to it. Clamping draws a flat line along the floor, which reads as a filter
 doing something quiet across the whole spectrum — F3 at −26.8 dB in the Aaa
-patch has skirts below −48 for most of the width and looked exactly like
-that.
+patch has skirts below the floor for most of the width and looked exactly
+like that.
+
+**But the break is taken to the edge, and the floor is −66 dB rather than the
+−48 it started at.** Both came out of one report: on Uuuu, and worst on the
+female voice, the summed response "wraps and appears as an upward curve".
+
+It was not wrapping — `yOf` clamps, so it cannot. Two things compounded:
+
+* The **sum** goes far deeper than any single skirt. Three resonators in
+  parallel with alternating polarity cancel where two of them meet in
+  antiphase, and the notch that digs is nothing like the component curves
+  around it. Measured across the whole preset table, five of the ten presets
+  put the sum below −48 dB, and the deepest is **−61.5 dB** (female Aaaa,
+  near 2 kHz). At the old floor those troughs were simply not on the picture.
+* Where a curve did leave the scale, the line **stopped in clear air**. The
+  240 samples span six and a half octaves, so beside a notch one sample can
+  sit 15 dB above the floor and the next 10 dB below it; dropping the second
+  ended the subpath well up the plot and started the next one the same way.
+  Male Uuuu broke three times, female Uuuu twice, and what survived between
+  two breaks was a **short arc floating in the middle of the display with
+  nothing joining it to anything** — which is exactly what a curve looks like
+  when it turns round and comes back up.
+
+So: −66 dB puts every preset's trough on the scale (and keeps the 12 dB grid
+spacing, now down to −60), and `drawPolyline` interpolates the crossing so a
+curve that does leave runs **down to the bottom edge** and reappears from it.
+Leaving the scale now looks like leaving the scale. The floor costs 23% of
+the vertical resolution on the peaks, which is worth paying to stop the
+display lying about the shape of the response.
 
 #### Getting live values from the processor to the editor
 
@@ -931,11 +959,34 @@ reach — see the BUG entry above.
 geometry, the colours, the readouts — so it can be **looked at**. The
 constants are not duplicated in it: they are parsed out of
 `VocalFilterEditor.h` and evaluated in declaration order, and the vowel names
-out of `VocalFilterDsp.h`, so the picture cannot drift from the code. If a
-constant becomes an expression the script cannot evaluate, it fails loudly
-rather than drawing a layout that is not the one that will ship.
+and formant tables out of `VocalFilterDsp.h`, so the picture cannot drift
+from the code. If a constant becomes an expression the script cannot
+evaluate, it fails loudly rather than drawing a layout that is not the one
+that will ship.
 
-The panel is **664 × 229**. It grew RIGHTWARDS to make room for the response
+**BUG (found, fixed): it drifted anyway, silently.** The male table's Aaaa
+entry names a shared array — `{ kAaaFormants[0], kAaaFormants[1],
+kAaaFormants[2] }` — instead of writing its numbers out. The row regex
+matched numeric triples only, so that entry contributed nothing, every later
+vowel shifted up one, and the script found four vowels where the header
+declares five. The committed `docs/panel.png` and `docs/panel-vowel.png` had
+the **Aaaa button lit over Eeee's numbers** (270 / 2290 / 3010 instead of
+730 / 1090 / 2440), and asking for Uuuu crashed with `IndexError`. A tool
+whose whole claim is that the picture cannot drift from the code drew a
+picture that had.
+
+Two fixes, and the second matters more: references are now resolved, *and*
+the entry and formant counts are checked against `kVowelCount` and
+`kFormantCount`, so a table this cannot read stops the script instead of
+quietly renaming somebody else's numbers. Deleting a vowel from a copy of the
+header now gives `kVowelsMale: read 4 entries, expected kVowelCount = 5`; the
+old parser gave the same four rows it always did, and said nothing.
+
+The lesson is the general one: a generated artefact needs to fail loudly on
+a partial read, because a **partial** parse looks exactly like a successful
+one — right shape, right count of things on screen, wrong numbers.
+
+The panel is **664 × 258**. It grew RIGHTWARDS to make room for the response
 display — every slider position is unchanged by its arrival, which is what
 having the layout come out of one grid buys. A second argument picks which vowel button to draw lit —
 `docs/panel.png` is the default state, Manual with none lit, and
