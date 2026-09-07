@@ -28,8 +28,8 @@ summed **inverted**: three bandpasses added in phase cancel between the peaks
 and dig a null a real tract does not have.
 
 [`docs/signal-path.png`](docs/signal-path.png) draws the whole thing —
-including how the vowel selector and the glide reach the filters, and how the
-display gets the values it draws.
+including how the voice switch, the vowel selector and the glide reach the
+filters, and how the display gets the values it draws.
 
 The filters are RBJ constant-0 dB-peak bandpasses, so a formant's Level is its
 level and the Width control is not secretly a second gain.
@@ -95,6 +95,12 @@ instant jump of F2 from 870 Hz to 2290 Hz is a click.
 and the nine formant parameters are ignored; touching a slider on the panel
 captures the preset's values and switches back to Manual, so nothing jumps.
 
+**Voice** picks which of the two tables a preset comes from. It is read by the
+processor the same way, so it works with the editor closed and under
+automation, and a voice change glides exactly as a vowel change does — it just
+moves F2 by at most 3.8 semitones against up to 16.8, so the same Glide time
+sounds far less dramatic.
+
 The display draws each formant's response — F1 yellow, F2 green, F3 blue — and
 the summed response in white, following the DSP in real time as it glides.
 
@@ -149,13 +155,22 @@ c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
     -o /tmp/paramstests && /tmp/paramstests
 ```
 
-91 assertions between them. They measure rather than assume: where the formant peaks
-actually land, that the running filter matches the curve the display draws,
-that the −3 dB width is the width that was asked for, that the response is
-unchanged from 44.1 k to 192 k, that every glide setting lands on the right
-sample, and that the fastest legal glide is 30 dB quieter at 6–12 kHz than an
-instant jump. Several include a negative control, because a guard that has
-never failed is a guess.
+Each prints its own total — 63 and 25 at the last count. They measure rather
+than assume: where the formant peaks actually land, that the running filter
+matches the curve the display draws, that the −3 dB width is the width that
+was asked for, that the response is unchanged from 44.1 k to 192 k, that every
+glide setting lands on the right sample, and that the fastest legal glide is
+far quieter at 6–12 kHz than an instant jump — asserted at 30 dB, measured at
+36.
+
+The parameter suite covers what the DSP one structurally cannot see: that
+every id is classified exactly once, that a setting is not mistaken for one of
+the published display values, and that the normalised → voice → table
+conversion reaches both tables. It exists because a range check bounded by the
+end of the table once made the Voice switch silently do nothing.
+
+Several assertions include a negative control, because a guard that has never
+failed is a guess.
 
 ## Repository layout
 
@@ -164,9 +179,11 @@ never failed is a guess.
 | `source/` | the plug-in — `VocalFilterDsp.*` is the audio line and includes no SDK header |
 | `tests/` | `DspTests.cpp`, SDK-free; `ParamsTests.cpp`, headers only |
 | `tools/render-panel.py` | renders the editor layout to `docs/`, parsing the constants out of the headers |
+| `tools/check-editor.py` | guards one editor invariant no runtime test can reach |
 | `docs/` | those renders, and the signal-path diagram — `docs/README.md` says how each is regenerated |
 | `resource/au-info.plist` | the Audio Unit's identity |
 | **`ENGINEERING-NOTES.md`** | **the engineering record** — every decision, the measurement behind it, and the things that turned out wrong |
+| `LICENSE` | CC BY-SA 4.0, and what it does not cover |
 
 VocalFilter is **not a port of anything** — there is no DXi behind it. It was
 scaffolded from the build system the SpaceDub, ForTran and SpyBand DXi→VST3

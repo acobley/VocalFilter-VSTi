@@ -1007,7 +1007,7 @@ c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
     -o /tmp/paramstests && /tmp/paramstests
 ```
 
-Sixty-seven DSP assertions and twenty-four parameter assertions, all passing. The ones worth knowing about:
+Sixty-three DSP assertions and twenty-five parameter assertions, all passing — each suite prints its own total, and these were counted from that output rather than incremented by hand, which is how the figure had drifted twice before. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
