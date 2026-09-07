@@ -42,6 +42,14 @@ than to read:
   hidden parameters exist because a message sent from `process()` is silently
   discarded by the host's connection proxy.
 
+## Guards
+
+`python3 tools/check-editor.py` — `setValueNormalized` may appear in the
+editor only inside `showValue`, which pairs it with `invalid()`. Without that
+pairing a control holds the right value and repaints only when something else
+dirties its region, which is how the Voice switch came to follow the mouse but
+not host automation.
+
 ## panel.png / panel-vowel.png
 
 The editor's layout, drawn by `tools/render-panel.py`. Not screenshots and not

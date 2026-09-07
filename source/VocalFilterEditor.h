@@ -147,6 +147,18 @@ private:
 	/** One parameter's value in its own plain unit. */
 	double plainOf (Steinberg::Vst::ParamID tag) const;
 
+	/** Set what a control SHOWS, and mark it for redraw.
+	 *
+	 *  THE ONLY PLACE THIS EDITOR CALLS setValueNormalized.
+	 *  CControl::setValue assigns the value and nothing else - it does not
+	 *  mark the view dirty - so a value set without the invalidate repaints
+	 *  only when something else happens to dirty the same region. That is
+	 *  exactly how the Voice switch presented: correct under the mouse,
+	 *  because SpyToggle's own handler invalidates, and intermittent under
+	 *  automation, because nothing did. tools/check-editor.py fails the
+	 *  build guard if another call site appears. */
+	void showValue (VSTGUI::CControl* control, double normalized);
+
 	/** A slider bound to a parameter, labelled, and formatting its own
 	    readout from the SAME table the host reads. */
 	SpySlider* addSlider (Steinberg::Vst::ParamID tag, const char* label,

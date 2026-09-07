@@ -138,6 +138,11 @@ void VocalFilterEditor::refreshVowelState ()
 	const int selector = currentVowel ();
 	const FormantSetting* preset = vowelSelection (selector, currentVoice ());
 
+	// The switch itself, FIRST. It is a control like any other and the
+	// panel is just as likely to be catching up with a host as with a
+	// click - see showValue.
+	showValue (mVoiceToggle, mController->getParamNormalized (kVoice));
+
 	for (int v = 0; v < kVowelCount; ++v)
 		if (mVowelButtons[v])
 			mVowelButtons[v]->setSelected (v + 1 == selector);
@@ -164,8 +169,7 @@ void VocalFilterEditor::refreshVowelState ()
 
 			const double shown = preset ? paramDef (tag).toNormalized (plain[j])
 			                            : mController->getParamNormalized (tag);
-			it->second->setValueNormalized (static_cast<float> (shown));
-			it->second->invalid ();
+			showValue (it->second, shown);
 		}
 	}
 }
@@ -193,8 +197,7 @@ SpySlider* VocalFilterEditor::addSlider (ParamID tag, const char* label, const C
 
 	mControls[tag] = control;
 	if (mController)
-		control->setValueNormalized (
-			static_cast<float> (mController->getParamNormalized (tag)));
+		showValue (control, mController->getParamNormalized (tag));
 
 	// Z-order is the order views are added, and every control here is a
 	// direct child of the frame - so a control's getViewSize() is already
@@ -246,8 +249,7 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 			this, static_cast<int32_t> (kVoice));
 		mVoiceToggle->setStateNames (voiceName (kVoiceMale), voiceName (kVoiceFemale));
 		mControls[kVoice] = mVoiceToggle;
-		mVoiceToggle->setValueNormalized (
-			static_cast<float> (mController->getParamNormalized (kVoice)));
+		showValue (mVoiceToggle, mController->getParamNormalized (kVoice));
 		frame->addView (mVoiceToggle);
 
 		addHeading ("voice — moves every vowel's formants",
@@ -394,6 +396,15 @@ void VocalFilterEditor::refreshDisplay ()
 }
 
 //------------------------------------------------------------------------
+void VocalFilterEditor::showValue (CControl* control, double normalized)
+{
+	if (control == nullptr)
+		return;
+	control->setValueNormalized (static_cast<float> (normalized));
+	control->invalid ();
+}
+
+//------------------------------------------------------------------------
 double VocalFilterEditor::plainOf (ParamID tag) const
 {
 	if (mController == nullptr)
@@ -471,8 +482,6 @@ void VocalFilterEditor::updateControl (ParamID tag, ParamValue normalized)
 	// not a control update, it is a whole-panel one.
 	if (tag == kVowel || tag == kVoice)
 	{
-		if (tag == kVoice && mVoiceToggle)
-			mVoiceToggle->setValueNormalized (static_cast<float> (normalized));
 		refreshVowelState ();
 		refreshDisplay ();
 		return;
@@ -489,8 +498,7 @@ void VocalFilterEditor::updateControl (ParamID tag, ParamValue normalized)
 	if (it == mControls.end () || it->second == nullptr)
 		return;
 
-	it->second->setValueNormalized (static_cast<float> (normalized));
-	it->second->invalid ();
+	showValue (it->second, normalized);
 }
 
 //------------------------------------------------------------------------

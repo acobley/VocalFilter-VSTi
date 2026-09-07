@@ -467,6 +467,48 @@ code. The settings are now **listed out by name**, with a second assertion
 that the list covers every id that is not a published value. A guard that
 cannot fail is not a guard.
 
+### BUG — the Voice switch followed the mouse but not automation
+
+**Symptom, as reported:** automating Voice from the host moved the formants,
+but the switch on the panel changed state only sometimes.
+
+The formants moving meant the processor path was right — this was purely the
+redraw. `updateControl` set the toggle's value and stopped there:
+
+```cpp
+if (tag == kVoice && mVoiceToggle)
+    mVoiceToggle->setValueNormalized (normalized);   // and no invalid()
+```
+
+**`CControl::setValue` assigns the value and nothing else.** In the vendored
+VSTGUI it is one line: `value = clamp (val, getMin (), getMax ());`. It does
+not mark the view dirty. So the toggle held the right value and repainted only
+when something else happened to invalidate that region — which is exactly the
+shape of the report. Clicking always worked, because `SpyToggle`'s own mouse
+handler calls `invalid()`; automation never did.
+
+**Fix:** one private `showValue (control, normalized)` that pairs the set with
+the invalidate, and it is now the **only** place this editor calls
+`setValueNormalized` — the special case is gone, and `refreshVowelState`
+updates the switch along with everything else.
+
+**Guarded mechanically**, because this session has twice now watched a rule
+that lived only in a comment get broken. `tools/check-editor.py` fails if
+`setValueNormalized` appears anywhere but inside `showValue`, or if
+`showValue` stops calling `invalid()`:
+
+```sh
+python3 tools/check-editor.py
+```
+
+Re-introducing the old special case makes it exit 1 and name the line. It is
+honest about its limits: it cannot tell you `showValue` is *called* where it
+should be, only that nothing bypasses it.
+
+If a switch ever misbehaves like this again and the invalidate is present, the
+next suspect is the thread — VST3 documents the controller as UI-thread, and
+`invalid()` from anywhere else is not safe.
+
 ### 2c. The Vowel selector — a mode, acted on by the PROCESSOR
 
 `Vowel` is a six-position enumerated parameter: Manual, then the five
@@ -841,6 +883,9 @@ because what it shows moves without anything on the panel being touched — a
 glide, or a host automating `Vowel`.
 
 ### Verifying the layout without building
+
+`tools/check-editor.py` guards the one editor invariant no runtime test can
+reach — see the BUG entry above.
 
 `tools/render-panel.py` draws the panel to `docs/panel.png` — the SlideSpin
 geometry, the colours, the readouts — so it can be **looked at**. The
