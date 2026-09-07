@@ -72,6 +72,16 @@ const ParamDef kParams[kNumParams] =
 //------------------------------------------------------------------------
 static_assert (kNumParams == 23, "thirteen settings, nine published values, and the voice");
 static_assert (kNumStoredParams == 13, "only the settings are saved");
+
+// The published block ends exactly where kVoice begins. If another id is ever
+// appended, this is what fails - rather than the switch silently doing
+// nothing, which is how it presented the first time.
+static_assert (kLiveEnd == kVoice, "the published block must end at kVoice");
+static_assert (! isLiveParam (kVoice), "kVoice is a SETTING, not a published value");
+static_assert (isLiveParam (kLiveF1Freq) && isLiveParam (kLiveF3Level),
+               "the nine published values are live");
+static_assert (! isLiveParam (kMix) && ! isLiveParam (kGlide),
+               "settings are not live");
 static_assert (liveParam (0, kFieldFreq)  == kLiveF1Freq,  "live F1 freq id");
 static_assert (liveParam (2, kFieldLevel) == kLiveF3Level, "live F3 level id");
 static_assert (formantParam (0, kFieldFreq)      == kF1Freq,      "F1 freq id");

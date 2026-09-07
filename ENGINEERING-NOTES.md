@@ -406,6 +406,67 @@ called it F2, and reported a failure. It made a working configuration look
 broken and sent the fit chasing it. The suite now finds **local maxima** and
 matches each formant to the nearest one, with no windows at all.
 
+### BUG — the Voice switch did nothing, and the range check that caused it
+
+**Symptom, as reported:** pressing Female changed no formant frequencies.
+
+**Cause:** one predicate.
+
+```cpp
+bool isLiveParam (ParamID id) { return id >= kLiveBase && id < kNumParams; }
+```
+
+That was correct when the nine published values were the last ids in the
+table. `kVoice` was then appended **after** them — because ids are only ever
+appended — which put a setting inside the range that predicate calls
+"published". Two consequences, both silent:
+
+* `VocalFilterProcessor::applyParameterChanges` refuses to record a published
+  value, so the DSP never learned the voice had changed;
+* `VocalFilterEditor::updateControl` returns early for a published value, so
+  the panel never redrew either.
+
+The switch wrote its parameter, the host saw the write and recorded it, and
+nothing whatsoever happened. **A range check whose upper bound is "the end of
+the table" is a bug waiting for the next append.**
+
+**Fix:** bound the block by itself.
+
+```cpp
+constexpr ParamID kLiveEnd = kLiveBase + kFormantCount * 3;
+constexpr bool isLiveParam (ParamID id) { return id >= kLiveBase && id < kLiveEnd; }
+```
+
+and pin it, so the next append fails the build rather than the feature:
+
+```cpp
+static_assert (kLiveEnd == kVoice, "the published block must end at kVoice");
+static_assert (! isLiveParam (kVoice), "kVoice is a SETTING, not a published value");
+```
+
+**Why nothing caught it.** `DspTests.cpp` is deliberately free of SDK types,
+which is what lets it run anywhere — and it means it cannot see
+`VocalFilterParams.h` at all. The whole parameter table, its ids and the
+predicates that classify them were untested. `tests/ParamsTests.cpp` is the
+answer: it needs only the SDK's *headers*, so it links against
+`VocalFilterParams.cpp` alone and still runs standalone.
+
+Run against the code as it was, it fails on three assertions; the
+`static_assert` stops the build before that, and had to be removed to get a
+binary to observe failing at all.
+
+**One of its own assertions was a tautology** on the first pass:
+
+```cpp
+for (id) if (! isLiveParam (id) && ! processorWouldRecord (id)) ...
+```
+
+`processorWouldRecord` *is* `! isLiveParam`, so this asked whether
+`!isLiveParam` implies `!isLiveParam` and passed cheerfully against the broken
+code. The settings are now **listed out by name**, with a second assertion
+that the list covers every id that is not a published value. A guard that
+cannot fail is not a guard.
+
 ### 2c. The Vowel selector — a mode, acted on by the PROCESSOR
 
 `Vowel` is a six-position enumerated parameter: Manual, then the five
@@ -844,14 +905,24 @@ defined, and syntax-only will not catch it. Do not pipe the compiler into
 `head` — the closed pipe kills it with SIGPIPE and you get a missing object
 file and no error message.
 
-The DSP suite:
+**Two** suites, and the split matters — see the BUG entry in section 2. The
+DSP suite is SDK-free and therefore cannot see the parameter table at all:
 
 ```sh
 c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-Sixty-one assertions, all passing. The ones worth knowing about:
+The parameter suite needs the SDK's headers but none of its code, so it links
+against one translation unit:
+
+```sh
+c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
+    tests/ParamsTests.cpp source/VocalFilterParams.cpp \
+    -o /tmp/paramstests && /tmp/paramstests
+```
+
+Sixty-one DSP assertions and twenty parameter assertions, all passing. The ones worth knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught

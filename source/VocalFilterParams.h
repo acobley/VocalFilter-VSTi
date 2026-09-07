@@ -115,9 +115,21 @@ constexpr Steinberg::Vst::ParamID liveParam (int formant, FormantField field)
 	return static_cast<Steinberg::Vst::ParamID> (kLiveBase + formant * 3 + field);
 }
 
-inline bool isLiveParam (Steinberg::Vst::ParamID id)
+/** One past the last published value.
+
+    BOUNDED BY THE BLOCK, NOT BY THE TABLE. This read `id < kNumParams`
+    until kVoice was appended after the published values, at which point
+    the voice became a "live" parameter: the processor's
+    applyParameterChanges refused to record it and the editor's
+    updateControl returned before refreshing, so the switch wrote its
+    parameter, the host saw it, and nothing whatsoever happened. A range
+    check whose upper bound is "the end of the table" is a bug waiting for
+    the next append. */
+constexpr Steinberg::Vst::ParamID kLiveEnd = kLiveBase + kFormantCount * 3;
+
+constexpr bool isLiveParam (Steinberg::Vst::ParamID id)
 {
-	return id >= kLiveBase && id < kNumParams;
+	return id >= kLiveBase && id < kLiveEnd;
 }
 
 /** The settings run from 0 to here; the published values follow and are
@@ -202,7 +214,7 @@ const ParamDef& paramDef (Steinberg::Vst::ParamID id);
 
 /** True for one of the nine formant parameters - the ones the vowel
     selector overrides while it is on a preset. */
-inline bool isFormantParam (Steinberg::Vst::ParamID id)
+constexpr bool isFormantParam (Steinberg::Vst::ParamID id)
 {
 	return id >= kFormantBase && id < kFormantBase + kFormantCount * 3;
 }

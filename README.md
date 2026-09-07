@@ -130,15 +130,26 @@ and `auval -v aufx VcFl AECo`.
 
 ## Tests
 
-The DSP is deliberately free of SDK types, so the suite compiles and runs
-standalone — no host, no SDK, no build system:
+Two suites, neither of which needs a host or a build system.
+
+The DSP is deliberately free of SDK types, so its suite compiles and runs
+standalone:
 
 ```sh
 c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
     -o /tmp/dsptests && /tmp/dsptests
 ```
 
-47 assertions. They measure rather than assume: where the formant peaks
+The parameter table needs the SDK's headers but none of its code, so its suite
+links against a single translation unit:
+
+```sh
+c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
+    tests/ParamsTests.cpp source/VocalFilterParams.cpp \
+    -o /tmp/paramstests && /tmp/paramstests
+```
+
+81 assertions between them. They measure rather than assume: where the formant peaks
 actually land, that the running filter matches the curve the display draws,
 that the −3 dB width is the width that was asked for, that the response is
 unchanged from 44.1 k to 192 k, that every glide setting lands on the right
@@ -151,7 +162,7 @@ never failed is a guess.
 | | |
 |---|---|
 | `source/` | the plug-in — `VocalFilterDsp.*` is the audio line and includes no SDK header |
-| `tests/` | the SDK-free DSP suite |
+| `tests/` | `DspTests.cpp`, SDK-free; `ParamsTests.cpp`, headers only |
 | `tools/render-panel.py` | renders the editor layout to `docs/`, parsing the constants out of the headers |
 | `docs/` | those renders, and the signal-path diagram — `docs/README.md` says how each is regenerated |
 | `resource/au-info.plist` | the Audio Unit's identity |
