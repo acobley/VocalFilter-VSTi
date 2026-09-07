@@ -53,9 +53,17 @@ constant ever becomes an expression the script cannot evaluate, it fails
 loudly rather than drawing a layout that is not the one that will ship.
 
 ```sh
-python3 tools/render-panel.py                        # Manual: no button lit
-python3 tools/render-panel.py docs/panel-vowel.png 1 # Aaaa selected
+python3 tools/render-panel.py                           # Manual, male: no button lit
+python3 tools/render-panel.py docs/panel-vowel.png 1 0  # Aaaa, male voice
+python3 tools/render-panel.py docs/panel-female.png 2 1 # Eeee, female voice
 ```
+
+The third argument is the voice, so the female formants can be **looked at**
+rather than reasoned about. `panel-female.png` is female Eeee, whose F2 and F3
+sit only 520 Hz apart — the closest pair either table produces, and the case
+that decides whether the display's axis needs changing. It does not: they
+resolve about 11 px apart on the 288 px plot, and narrowing the axis from
+8 kHz to 5 kHz would buy one pixel.
 
 `panel.png` is the state the plug-in loads in; `panel-vowel.png` shows a
 vowel button lit, which is what the Vowel parameter looks like on a preset

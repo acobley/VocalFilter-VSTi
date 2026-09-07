@@ -34,9 +34,10 @@ display gets the values it draws.
 The filters are RBJ constant-0 dB-peak bandpasses, so a formant's Level is its
 level and the Width control is not secretly a second gain.
 
-## The five vowels
+## The five vowels, in two voices
 
-One button each, and a **Vowel** parameter the host can automate.
+One button each, a **Vowel** parameter the host can automate, and a **Voice**
+switch between an adult male and an adult female tract.
 
 | | Sound | F1 | F2 | F3 | B1 | B2 | B3 | A1 | A2 | A3 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -46,10 +47,15 @@ One button each, and a **Vowel** parameter the host can automate.
 | Oooo | /o/ *boat* | 450 | 900 | 2400 | 60 | 90 | 120 | 0 | −7.4 | −30.0 |
 | Uuuu | /u/ *boot* | 300 | 870 | 2240 | 50 | 90 | 120 | 0 | −10.2 | −30.0 |
 
-Frequencies in Hz are the classic adult-male means from **Peterson & Barney
-(1952)**, so all five sit in one consistent voice. The exception is Oooo: the
-letter O names a diphthong, /oʊ/, which they did not measure, so that row
-carries the common /o/ set and is marked as such in the source.
+Frequencies in Hz above are the classic adult-male means from **Peterson &
+Barney (1952)**, so all five sit in one consistent voice. The exception is
+Oooo: the letter O names a diphthong, /oʊ/, which they did not measure, so
+that row carries the common /o/ set and is marked as such in the source.
+
+The **female** table is their adult-female means — a shorter tract, so every
+formant higher: Aaaa becomes 850/1220/2810 and Eeee 310/2790/3310. Oooo is
+scaled from the male /o/ set by the mean male-to-female ratio of the three
+back vowels P&B *did* measure.
 
 Bandwidths sit mid-range of the measured adult spread, narrower at B1 for the
 close vowels.
@@ -60,6 +66,11 @@ parameters — which is why a cascade synthesiser needs no amplitude controls
 and a parallel one cannot do without them. Each pair is fitted against the
 all-pole cascade those formants imply. `ENGINEERING-NOTES.md` §2 has the method,
 the numbers and the two wrong answers that came first.
+
+**Both voices share those levels**, deliberately: a shorter tract moves where
+the resonances sit, not much how they are balanced. Refitting them for the
+female set puts one formant outside its parameter's range and gives /i/ no F2
+peak at all — §2d has the measurements.
 
 ## Controls
 
@@ -72,6 +83,7 @@ the numbers and the two wrong answers that came first.
 | **Glide** | 0–2000 ms | 150 |
 | **Output Trim** | −60 … 0 dB | 0 |
 | **Vowel** | Manual, Aaaa, Eeee, Iiii, Oooo, Uuuu | Manual |
+| **Voice** | Male, Female | Male |
 
 **Glide** is how long a formant takes to reach a new value. It is a timed
 linear ramp, one length for all nine parameters, so however far each has to
