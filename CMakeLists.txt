@@ -237,6 +237,40 @@ set(SMTG_ENABLE_VST3_PLUGIN_EXAMPLES  0 CACHE BOOL "" FORCE)
 set(SMTG_ENABLE_VSTGUI_SUPPORT        1 CACHE BOOL "" FORCE)
 set(SMTG_CREATE_PLUGIN_LINK           1 CACHE BOOL "" FORCE)
 
+#-----------------------------------------------------------------------------
+# KEEP BUILD PATHS OUT OF THE SHIPPED BINARY
+#
+# VSTGUI's assert macros embed __FILE__, so a release build carries dozens of
+# absolute paths naming the home directory it was built in - public the moment
+# an installer is published.
+#
+# -fdebug-prefix-map DOES NOT FIX THIS. It rewrites debug info and leaves
+# __FILE__ alone. -ffile-prefix-map is the superset of that and
+# -fmacro-prefix-map, and it is the one that works.
+#
+# It has to be a DIRECTORY-WIDE option set BEFORE add_subdirectory below,
+# because the paths are in VSTGUI's translation units and not in ours:
+# target_compile_options on the plug-in target strips almost nothing.
+#
+# Guarded, because an unknown flag is a hard error on an older toolchain and
+# this is cosmetic - it must never be the reason a build fails.
+#
+# Check it worked:  strings -a <binary> | grep -c "$HOME"   -> 0
+# It only takes effect on a FRESH configure: ./setup-xcode.sh --clean.
+#-----------------------------------------------------------------------------
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-ffile-prefix-map=/a=b" HAVE_FILE_PREFIX_MAP)
+if(HAVE_FILE_PREFIX_MAP)
+    add_compile_options(
+        "-ffile-prefix-map=${CMAKE_SOURCE_DIR}=${PLUGIN_NAME}"
+        "-ffile-prefix-map=${VST3_SDK_ROOT}=vst3sdk"
+        "-ffile-prefix-map=${CMAKE_BINARY_DIR}=build")
+    message(STATUS "${PLUGIN_NAME}: build paths stripped from __FILE__ with -ffile-prefix-map")
+else()
+    message(STATUS "${PLUGIN_NAME}: no -ffile-prefix-map on this toolchain - the binary will "
+                   "carry absolute source paths")
+endif()
+
 set(SMTG_VSTGUI_ROOT "${VST3_SDK_ROOT}")
 
 add_subdirectory(${VST3_SDK_ROOT} ${PROJECT_BINARY_DIR}/vst3sdk)

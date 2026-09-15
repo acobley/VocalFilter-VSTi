@@ -2,3 +2,18 @@ build/
 build-make/
 external/
 .DS_Store
+
+# Installer build products. The .pkg is a GitHub RELEASE ASSET, not a commit:
+# git never forgets a blob, so a committed package is in every clone for ever
+# and deleting it later shrinks none of them. Ignoring it also means a
+# `git add -A` cannot sweep an UNSIGNED build into the repository.
+installer/build/
+installer/*.pkg
+
+# Signing material. Never, under any circumstance.
+*.cer
+*.certSigningRequest
+*.p12
+*.pfx
+*.p8
+AuthKey_*
