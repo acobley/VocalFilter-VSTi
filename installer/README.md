@@ -26,7 +26,7 @@ strings -a build/VST3/Release/VocalFilter.vst3/Contents/MacOS/VocalFilter \
 installer/build-installer.sh \                  # 4. ONCE, signed
     --sign-app       "Developer ID Application: Your Name (TEAMID)" \
     --sign-installer "Developer ID Installer: Your Name (TEAMID)" \
-    --notarize       your-notary-profile
+    --notarize       project6-notary
 ```
 
 **Run the installer build once, not twice.** An unsigned run writes the same
@@ -152,13 +152,16 @@ certificates — and a notarisation:
 installer/build-installer.sh \
     --sign-app       "Developer ID Application: Your Name (TEAMID)" \
     --sign-installer "Developer ID Installer: Your Name (TEAMID)" \
-    --notarize       my-notary-profile
+    --notarize       project6-notary
 ```
 
-`my-notary-profile` is stored once, in the keychain:
+`project6-notary` is a keychain profile stored once. **It is not
+per-project** — it holds an Apple ID and a Team ID and nothing else, so the one
+stored for Project6 notarises this too. Store another only if you want a
+different name:
 
 ```sh
-xcrun notarytool store-credentials my-notary-profile \
+xcrun notarytool store-credentials project6-notary \
     --apple-id you@example.com --team-id TEAMID --password <app-specific-password>
 ```
 
@@ -270,14 +273,24 @@ your Apple ID password.
 3. Store it all once, in the keychain:
 
 ```sh
-xcrun notarytool store-credentials vocalfilter-notary \
+xcrun notarytool store-credentials project6-notary \
     --apple-id you@example.com \
     --team-id ABCDE12345 \
     --password abcd-efgh-ijkl-mnop
 ```
 
-`vocalfilter-notary` is just a label you choose. The password is stored in the
-keychain, so it never appears in a command again.
+`project6-notary` is just a label. **Step 3 is already done** if you
+notarised Project6 from this Mac — the profile holds an Apple ID and a Team ID,
+nothing project-specific, so one profile does every plug-in and there is no
+reason to generate a second app-specific password. Check it without building
+anything:
+
+```sh
+xcrun notarytool history --keychain-profile project6-notary
+```
+
+The password is stored in the keychain, so it never appears in a command
+again.
 
 #### If that fails with HTTP 500
 
@@ -320,7 +333,7 @@ API → generate a team key. You need three things from it: the **Key ID**, the
 downloads exactly once**, so keep it somewhere safe and backed up.
 
 ```sh
-xcrun notarytool store-credentials vocalfilter-notary \
+xcrun notarytool store-credentials project6-notary \
     --key ~/private_keys/AuthKey_XXXXXXXX.p8 \
     --key-id XXXXXXXX \
     --issuer aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee
@@ -329,12 +342,12 @@ xcrun notarytool store-credentials vocalfilter-notary \
 **`build-installer.sh` needs no change either way.** `store-credentials` writes
 the same kind of keychain profile whichever authentication it is given, and
 `notarytool submit --keychain-profile` reads both identically — so
-`--notarize vocalfilter-notary` stays exactly as it is.
+`--notarize project6-notary` stays exactly as it is.
 
 To test the credentials without building anything:
 
 ```sh
-xcrun notarytool history --keychain-profile vocalfilter-notary
+xcrun notarytool history --keychain-profile project6-notary
 ```
 
 ### 4. Build it
@@ -343,7 +356,7 @@ xcrun notarytool history --keychain-profile vocalfilter-notary
 installer/build-installer.sh \
     --sign-app       "Developer ID Application: A. E. Cobley (ABCDE12345)" \
     --sign-installer "Developer ID Installer: A. E. Cobley (ABCDE12345)" \
-    --notarize       vocalfilter-notary
+    --notarize       project6-notary
 ```
 
 Notarisation waits on Apple and usually takes a few minutes. The script then

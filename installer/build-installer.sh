@@ -31,11 +31,14 @@
 #     installer/build-installer.sh \
 #       --sign-app       "Developer ID Application: Your Name (TEAMID)" \
 #       --sign-installer "Developer ID Installer: Your Name (TEAMID)" \
-#       --notarize       my-notary-profile
+#       --notarize       project6-notary
 #
-#   where my-notary-profile was stored once with
-#     xcrun notarytool store-credentials my-notary-profile \
+#   where the profile was stored ONCE, in the keychain, with
+#     xcrun notarytool store-credentials <profile> \
 #         --apple-id you@example.com --team-id TEAMID --password <app-specific>
+#
+#   It is not per-project: the profile holds an Apple ID and a Team ID and
+#   nothing else, so whichever one you already have notarises this too.
 #-----------------------------------------------------------------------------
 set -euo pipefail
 
