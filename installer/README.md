@@ -64,6 +64,33 @@ the `.component` (innermost bundle first, or the outer signature is invalidated
 by the inner one), and then **fails the build if any symlink in the payload
 still points at an absolute path** — which catches the next one somebody adds.
 
+## Architectures: check, do not assume
+
+`distribution.xml` advertises the installer as `x86_64,arm64`. If the build is
+arm64 only, the package then installs cleanly on an Intel Mac — or in any host
+running under Rosetta — and nothing loads.
+
+Nothing in `CMakeLists.txt` or `setup-xcode.sh` sets `CMAKE_OSX_ARCHITECTURES`,
+so this rests on the Xcode default, which is a thing that can change. It was
+measured on the current Release build and is **already universal**:
+
+```
+Mach-O universal binary with 2 architectures:
+  [x86_64 ... bundle] [arm64 ... bundle]
+```
+
+so the declaration is honest and there is nothing to decide. Check it again
+before each release rather than trusting this paragraph:
+
+```sh
+lipo -archs build/VST3/Release/VocalFilter.vst3/Contents/MacOS/VocalFilter
+#   x86_64 arm64
+```
+
+If that ever comes back as one architecture, either build universal with
+`-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"` or narrow `hostArchitectures` in
+`distribution.xml` to match — but do not ship the two disagreeing.
+
 ## The other silent one: a postinstall that never runs
 
 `pkgbuild` takes `--scripts` **exactly as it finds the directory**, and a
