@@ -74,7 +74,7 @@ Taken from the finished, notarised and **stapled** package — stapling changes
 the bytes, so a checksum taken before it does not match what you downloaded.
 
 ```
-__SHA256__  VocalFilter-1.0.0.1.pkg
+39882f32792a86c71b2e71d97342c1224c13b62c0596118cb2e5c2d6a350bdd9  VocalFilter-1.0.0.1.pkg
 ```
 
 ---
