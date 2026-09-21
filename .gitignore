@@ -9,6 +9,7 @@ external/
 # `git add -A` cannot sweep an UNSIGNED build into the repository.
 installer/build/
 installer/*.pkg
+installer/.built-from
 
 # Signing material. Never, under any circumstance.
 *.cer

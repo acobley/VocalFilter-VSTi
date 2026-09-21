@@ -40,9 +40,9 @@ set(CMAKE_OSX_DEPLOYMENT_TARGET 10.13 CACHE STRING "macOS deployment target")
 # loses it.
 #-----------------------------------------------------------------------------
 set(PLUGIN_NAME         "VocalFilter")
-set(PLUGIN_VERSION      "1.0.0.1")
+set(PLUGIN_VERSION      "1.0.1.0")
 set(PLUGIN_DESCRIPTION  "VocalFilter - a stereo audio effect")
-set(PLUGIN_COMPANY      "A. E. Cobley")
+set(PLUGIN_COMPANY      "AE Cobley")
 set(PLUGIN_BUNDLE_ID    "audio.vocalfilter.vst3")
 set(PLUGIN_AU_BUNDLE_ID "audio.vocalfilter.audiounit")
 

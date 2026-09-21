@@ -8,7 +8,46 @@
 as two separately choosable components, so somebody who only wants one format
 gets only that one.
 
-## Running it
+## Releasing: two scripts, and what they refuse to do
+
+Everything below is what the release sequence *means*; these run it.
+
+```sh
+installer/build-release.sh              # tests, clean universal build, checks, ONE signed pkg
+installer/verify-install.sh             # after installing it on this Mac
+installer/publish-release.sh --dry-run  # every check, nothing pushed
+installer/publish-release.sh            # checksum, push, tag the build commit, GitHub Release
+```
+
+They are the same two files in every AE Cobley plug-in; the name comes from
+`NAME=` in `build-installer.sh`.
+
+`build-release.sh` looks the signing identities up (one Developer ID
+Application, one Developer ID Installer, by SHA-1 hash) and the notary profile
+(`project6-notary`, or `--notarize <profile>` / `NOTARY_PROFILE=`). Before
+building anything it refuses: version numbers that disagree between
+`CMakeLists.txt`, `source/version.h` and `resource/au-info.plist`, or a maker's
+name that differs between the VST3 and the AU or has a full stop in it
+(`tools/check-versions.py`); a version that is already tagged; missing release
+notes, or notes still saying TODO; a dirty tree; failing tests. After a clean
+universal build it refuses home-directory paths in the binaries and a
+single-architecture signed build. `--unsigned`, `--skip-tests` and
+`--allow-dirty` are for local builds.
+
+`build-installer.sh` records the commit it built from in
+`installer/.built-from`. `publish-release.sh` refuses a package that is not
+stapled or that Gatekeeper rejects, one built from a dirty tree, a tag already
+on GitHub at another commit, other uncommitted changes, and a missing `gh`
+login — checked before anything is pushed. It writes the stapled package's
+SHA-256 into the notes' `SHA-256: <paste from: …>` line, commits that, pushes,
+and tags **the commit the package was built from**, not HEAD. `--remote <name>`
+pushes somewhere other than origin.
+
+Both scripts' refusals are stub-tested, on Linux or a Mac, by
+`installer/test-build-release.sh` and `installer/test-publish.sh`, which the
+project's test runner calls.
+
+## Running it by hand
 
 **macOS only.** `pkgbuild`, `productbuild` and `codesign` are Apple's and exist
 nowhere else, so this cannot be run from the Linux side of a remote session.
