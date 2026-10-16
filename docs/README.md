@@ -56,51 +56,36 @@ pairing a control holds the right value and repaints only when something else
 dirties its region, which is how the Voice switch came to follow the mouse but
 not host automation.
 
-## panel.png / panel-vowel.png
+## panel.png / panel-vowel.png / panel-female.png
 
-The editor's layout, drawn by `tools/render-panel.py`. Not screenshots and not
-mock-ups: the script **parses the layout constants out of
-`source/VocalFilterEditor.h`** and the vowel names and formant tables out of
-`source/VocalFilterDsp.h` and evaluates them in declaration order, so a
-control in the wrong place here is in the wrong place in the plug-in. If a
-constant ever becomes an expression the script cannot evaluate, it fails
-loudly rather than drawing a layout that is not the one that will ship.
-
-It also checks that it read `kVowelCount` entries of `kFormantCount` formants
-each, and stops if it did not. That check exists because it once did not:
-the male Aaaa entry names a shared array rather than writing its numbers out,
-the row regex skipped it, every later vowel shifted up one, and these two
-files sat in the repository with the **Aaaa button lit over Eeee's numbers**.
-A partial parse looks exactly like a successful one — same layout, same count
-of readouts, wrong values — so the counts are asserted rather than trusted.
+The panel, drawn by `tools/render-panel.py`. Not screenshots and not
+mock-ups. `tools/dump-layout.cpp` is compiled against
+**`source/VocalFilterLayout.h`** — the tables `VocalFilterEditor::open` builds
+the panel from — and prints them as JSON together with every knob's reading
+and the four response curves, computed by the DSP's own `bandpassMagnitude`
+and `bankMagnitude`. The script only draws what it is given, in the panel's
+palette. A control in the wrong place here is in the wrong place in the
+plug-in, and the curves are the plug-in's, not a re-implementation.
 
 ```sh
-python3 tools/render-panel.py                           # Manual, male: no button lit
+python3 tools/render-panel.py                           # Manual, male: what a fresh instance loads
 python3 tools/render-panel.py docs/panel-vowel.png 1 0  # Aaaa, male voice
-python3 tools/render-panel.py docs/panel-female.png 2 1 # Eeee, female voice
+python3 tools/render-panel.py docs/panel-female.png 4 1 # Oooo, female voice
 ```
 
-The third argument is the voice, so the female formants can be **looked at**
-rather than reasoned about. `panel-female.png` is female Eeee, whose F2 and F3
-sit only 520 Hz apart — the closest pair either table produces, and the case
-that decides whether the display's axis needs changing. It does not: they
-resolve about 11 px apart on the 288 px plot, and narrowing the axis from
-8 kHz to 5 kHz would buy one pixel.
+It needs a C++ compiler, Pillow, and the SDK's headers in `external/vst3sdk`.
+What it cannot show: the glide (it draws the panel at rest), hover and press
+states, and the exact faces — on a Mac it uses Helvetica Neue and Menlo as the
+plug-in does, elsewhere DejaVu, which is wider.
 
-`panel.png` is the state the plug-in loads in; `panel-vowel.png` shows a
-vowel button lit, which is what the Vowel parameter looks like on a preset
-whether it got there from a click or from automation.
+The layout is also held to its rules by `tests/LayoutTests.cpp` (run by
+`tools/run-tests.sh`): every parameter with a control appears once, nothing
+overlaps or leaves its section, the widest reading of every knob fits it, the
+vowel chart's axes are exactly the F1 and F2 parameter ranges, and no two
+vowel circles are close enough for a click to be ambiguous.
 
-Looking at these caught three faults that reading the code had not: F3's
-skirts drew a flat line along the bottom of the response display instead of
-ending; the legend ran off the plate when "Sum" was added to it; and the sum,
-where it dived past the old −48 dB floor, left an arc floating in mid-plot
-that read as the curve turning back up. The display's floor is now −66 dB —
-below every preset's deepest notch, the worst being female Aaaa at −61.5 —
-and a curve that does leave the scale is drawn down to the bottom edge rather
-than stopping at the last sample that happened to be on it.
-
-The response curves in `render-panel.py` are a **re-implementation** of
-`bandpassMagnitude` for the mock — the real one is in `VocalFilterDsp.cpp` and
-is what the plug-in draws. A small difference between the picture and the
-plug-in is expected; what these renders check is that the panel *fits*.
+Two lessons from the previous panel's renders carry over to the spectrum: the
+floor is −66 dB, below every preset's deepest notch (the worst is female Aaaa
+at −61.5), and a curve that does leave the scale is drawn down to the bottom
+edge rather than stopping at the last sample that happened to be on it, which
+left an arc floating mid-plot that read as the curve turning back up.

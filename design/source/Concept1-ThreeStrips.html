@@ -1,0 +1,104 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#141518}</style></head><body>
+<script src="common.js"></script>
+<script src="vf.js"></script>
+<script>
+// Concept 1 - R2Synth's own layout, section for section:
+// VOWEL in the oscillators' place, FORMANTS in the filter's, OUTPUT in the amp's,
+// and the glide where R2Synth keeps its modulation.
+const W = 1200, H = 640, V = MALE[0], SELV = 0;
+rect(0, 0, W, H, C.ground);
+vfHeader('Engine: 48000 Hz  ·  three parallel formants  ·  F2 summed inverted');
+
+// ---- VOWEL -----------------------------------------------------------
+section(16, 72, 300, 380, 'VOWEL', 'a mode, not a recall', C.amber, { subx: 72 });
+subhead(34, 118, 'VOICE', C.amber);
+seg(84, 104, 216, 24, ['Male', 'Female'], 0, C.amber);
+subhead(34, 158, 'PRESET', C.amber);
+for (let i = 0; i < 5; i++) vowelBtn(32 + i * 55.5, 168, 51, 74, i, i === SELV);
+rect(32, 252, 268, 30, C.seg, C.border, 8);
+lamp(50, 267, false, C.amber, 4.5);
+text(64, 271, 'MANUAL', { size: 10.5, weight: 700, fill: C.muted, ls: 0.4 });
+text(286, 271, 'the knobs drive the filter', { size: 10, fill: C.subtle, anchor: 'end' });
+line(32, 300, 300, 300, C.rule, 1);
+// Vowel table for the selected preset, read-only
+text(34, 322, 'Aaaa · /ɑ/ as in father · male', { size: 10.5, weight: 700, fill: C.title });
+['F1', 'F2', 'F3'].forEach((n, k) => {
+  const y = 348 + k * 28;
+  circle(40, y - 4, 4, FC[k]);
+  text(52, y, n, { size: 10, weight: 700, fill: FC[k] });
+  text(132, y, hz(V[0][k]), { size: 10.5, font: MONO, anchor: 'end', fill: C.text });
+  text(208, y, `${V[1][k]} Hz`, { size: 10.5, font: MONO, anchor: 'end', fill: C.muted });
+  text(296, y, db(V[2][k]), { size: 10.5, font: MONO, anchor: 'end', fill: C.muted });
+});
+text(132, 432, 'freq', { size: 9, fill: C.dim, anchor: 'end' });
+text(208, 432, 'width', { size: 9, fill: C.dim, anchor: 'end' });
+text(296, 432, 'level', { size: 9, fill: C.dim, anchor: 'end' });
+
+chevron(324, 262);
+
+// ---- FORMANTS --------------------------------------------------------
+section(332, 72, 596, 380, 'FORMANTS', 'three bandpasses in parallel, summed + − +', C.blue, { subx: 96 });
+seg(744, 86, 168, 22, ['Sum', 'Branches'], 1, C.blue, { size: 10 });
+respScreen(346, 118, 568, 150, V, { handles: true, label: 'at the knobs   48 kHz', right: '−48 … +6 dB' });
+for (let k = 0; k < 3; k++) {
+  const x0 = 346 + k * 192, c = FC[k];
+  if (k) line(x0 - 6, 286, x0 - 6, 438, C.rule, 1);
+  circle(x0 + 6, 296, 4, c);
+  text(x0 + 16, 300, `F${k + 1}`, { size: 11, weight: 800, fill: c, ls: 0.4 });
+  text(x0 + 40, 300, k === 1 ? 'inverted' : '', { size: 9.5, fill: C.subtle });
+  knob(x0 + 38, 346, 22, fracF(k, V[0][k]), c, hz(V[0][k]), 'FREQ');
+  knob(x0 + 112, 340, 15, fracB(V[1][k]), c, `${V[1][k]} Hz`, 'WIDTH', { vs: 9.5 });
+  knob(x0 + 160, 340, 15, fracL(V[2][k]), c, db(V[2][k]), 'LEVEL', { vs: 9.5 });
+}
+
+chevron(936, 262);
+
+// ---- OUTPUT ----------------------------------------------------------
+section(944, 72, 240, 380, 'OUTPUT', 'mix + trim', C.mint, { subx: 72 });
+// stereo meter screen
+screen(958, 104, 212, 96, { nx: 6, ny: 4 });
+text(968, 120, 'out', { size: 10, font: MONO, fill: C.muted });
+text(1160, 120, '−9.4 dBFS', { size: 10, font: MONO, fill: C.muted, anchor: 'end' });
+[['L', 0.68], ['R', 0.62]].forEach(([n, v], i) => {
+  const y = 140 + i * 26;
+  text(968, y + 9, n, { size: 10, font: MONO, fill: C.subtle });
+  rect(984, y, 176, 12, C.seg, null, 3);
+  rect(984, y, 176 * v, 12, hexA(C.mint, 0.85), null, 3);
+  line(984 + 176 * 0.83, y - 2, 984 + 176 * 0.83, y + 14, C.dim, 1);
+});
+knob(1006, 262, 24, 1, C.mint, '100 %', 'DRY / WET');
+knob(1124, 262, 24, 1, C.mint, '0.0 dB', 'OUTPUT TRIM');
+line(958, 330, 1170, 330, C.rule, 1);
+text(958, 356, 'Dry/Wet and Trim ease in', { size: 10.5, fill: C.subtle });
+text(958, 374, 'over ~10 ms. The nine formant', { size: 10.5, fill: C.subtle });
+text(958, 392, 'values follow the Glide.', { size: 10.5, fill: C.subtle });
+text(958, 428, 'Stereo · same filter both sides', { size: 10, font: MONO, fill: C.dim });
+
+// ---- GLIDE -----------------------------------------------------------
+section(16, 468, 1168, 156, 'GLIDE', 'a timed linear ramp: all nine values arrive on the same sample', C.violet, { subx: 64 });
+knob(76, 556, 26, 150 / 2000, C.violet, '150 ms', 'TIME');
+text(140, 534, 'Zero is floored', { size: 10.5, fill: C.subtle });
+text(140, 550, 'at 20 ms so a', { size: 10.5, fill: C.subtle });
+text(140, 566, 'click never lands.', { size: 10.5, fill: C.subtle });
+// ramp scope: Aaaa -> Eeee, normalised per formant onto its own range
+const sx = 262, sy = 500, sw = 908, sh = 110;
+screen(sx, sy, sw, sh, { nx: 12, ny: 3 });
+text(sx + 10, sy + 16, 'last move   Oooo → Aaaa', { size: 10, font: MONO, fill: C.muted });
+text(sx + sw - 10, sy + 16, '150 ms', { size: 10, font: MONO, fill: C.muted, anchor: 'end' });
+const t0 = sx + 260, t1 = sx + 260 + 480;
+line(t0, sy + 24, t0, sy + sh - 6, C.dim, 1, 'stroke-dasharray="3 3"');
+line(t1, sy + 24, t1, sy + sh - 6, C.dim, 1, 'stroke-dasharray="3 3"');
+text(t0 + 4, sy + 16, 'press', { size: 9, font: MONO, fill: C.dim });
+text(t1 + 4, sy + 16, 'arrive', { size: 9, font: MONO, fill: C.dim });
+const lh = (sh - 34) / 3;
+for (let k = 0; k < 3; k++) {
+  const a = MALE[3][0][k], b = MALE[0][0][k], ly = sy + 26 + k * lh;
+  const lo = ly + lh - 5, hi = ly + 5, ya = a < b ? lo : hi, yb = a < b ? hi : lo;
+  if (k) line(sx + 1, f1(ly), sx + sw - 1, f1(ly), C.rule, 1);
+  text(sx + 10, f1(ly + lh / 2 + 4), `F${k + 1}`, { size: 10, weight: 700, fill: FC[k] });
+  path(`M${sx + 40},${f1(ya)} L${t0},${f1(ya)} L${t1},${f1(yb)} L${sx + sw - 170},${f1(yb)}`, FC[k], 2);
+  circle(t1, f1(yb), 3.5, FC[k]);
+  text(sx + sw - 12, f1(ly + lh / 2 + 4), `${hz(a)} → ${hz(b)}`, { size: 10, font: MONO, fill: FC[k], anchor: 'end' });
+}
+renderAt(W, H);
+</script></body></html>

@@ -1,0 +1,358 @@
+//------------------------------------------------------------------------
+// VocalFilter - the panel's layout, as data
+//
+// THE "VOWEL SPACE" PANEL (branch Design2, 16 Oct 2026), from the design
+// design/VocalFilter-Concept3b-VowelSpace.png. It replaces the 348 x 229
+// grid of SpyBand bar sliders with R2Synth's panel idiom - sections,
+// knobs, segment switches, dark screens - and one new control: a vowel
+// chart you can play.
+//
+// THE LAYOUT IS DATA, not positions typed into the middle of open(), the
+// way R2Synth's UpdatedUI branch did it. This header includes NO VSTGUI,
+// so three things read the same numbers:
+//
+//   * VocalFilterEditor::open(), which builds the panel from the tables;
+//   * tests/LayoutTests.cpp, which checks nothing overlaps and everything
+//     fits - the only way to test a layout from a session that cannot
+//     run a host;
+//   * tools/dump-layout.cpp + tools/render-panel.py, which draw
+//     docs/panel.png from these tables.
+//
+//   +--------------------------------------------------------------+
+//   | VOCALFILTER | engine line                        [BYPASS]    |  header
+//   +-----------------------------+--------------------------------+
+//   | VOWEL SPACE      [Male|Fem] | SPECTRUM                        |
+//   |  F1 x F2 chart, the five    |  response, three handles        |
+//   |  vowels, the dot, the glide +--------------------------------+
+//   |                             | FORMANTS  F1 | F2 | F3 knobs    |
+//   | [a][i][I][o][u]   (Glide)   +--------------------------------+
+//   | [ MANUAL       ]   progress | OUTPUT   Dry/Wet  Trim          |
+//   +-----------------------------+--------------------------------+
+//
+// THE PAD IS THE PARAMETER SPACE. Its axes run over exactly the F1 and F2
+// parameter ranges (kFormantFreqMin/Max), log-scaled and laid out the way
+// a phonetician plots vowels - F2 FALLING to the right, F1 FALLING
+// downward - so every point on it is a reachable setting and every
+// setting is a point on it. padX/padY and their inverses are here, not in
+// the view, so the tests can hold them to that.
+//
+// The panel is 1200 x 640, R2Synth's size.
+//------------------------------------------------------------------------
+
+#pragma once
+
+#include "VocalFilterDsp.h"
+#include "VocalFilterParams.h"
+
+#include <cmath>
+
+namespace VocalFilter {
+namespace Layout {
+
+//------------------------------------------------------------------------
+/** A rectangle, left/top/right/bottom, in panel pixels. */
+struct Rect
+{
+	int left, top, right, bottom;
+
+	constexpr int width () const { return right - left; }
+	constexpr int height () const { return bottom - top; }
+};
+
+//------------------------------------------------------------------------
+// The panel
+//------------------------------------------------------------------------
+constexpr int kEditorWidth  = 1200;
+constexpr int kEditorHeight = 640;
+constexpr int kMargin       = 16;
+
+constexpr int kHeaderHeight = 56;
+
+/** Inside a section: the title row, and the padding round it. */
+constexpr int kSectionPadX     = 14;
+constexpr int kSectionPadTop   = 12;
+constexpr int kSectionTitleH   = 18;
+constexpr int kSectionRadius   = 10;
+
+/** Under every knob: two pixels, the reading, the label. */
+constexpr int kKnobGap       = 2;
+constexpr int kKnobValueH    = 13;
+constexpr int kKnobLabelH    = 12;
+constexpr int kKnobTextBand  = kKnobGap + kKnobValueH + kKnobLabelH;
+
+/** A segmented switch that sits in a section's title row. */
+constexpr int kTitleSwitchHeight = 24;
+
+/** CHARACTER WIDTHS for the fit tests - generous averages for Menlo 10
+    (readings) and Helvetica Neue bold 10 in capitals (labels). */
+constexpr int kValueCharWidth = 6;
+constexpr int kLabelCharWidth = 7;
+constexpr int kNoteCharWidth  = 6;
+
+//------------------------------------------------------------------------
+// Colours, by role. One per formant, carried through the knobs, the
+// handles on the spectrum and the column headings, so F2 is blue
+// everywhere it appears.
+//------------------------------------------------------------------------
+enum class Accent
+{
+	Amber,    // F1, and the vowel space
+	Blue,     // F2, and the spectrum
+	Violet,   // F3, the formants section, the glide
+	Mint      // output
+};
+
+constexpr Accent formantAccent (int formant)
+{
+	return formant == 0 ? Accent::Amber : formant == 1 ? Accent::Blue : Accent::Violet;
+}
+
+//------------------------------------------------------------------------
+// Sections
+//------------------------------------------------------------------------
+struct Section
+{
+	const char* title;
+	const char* subtitle;   // may be empty
+	Accent accent;
+	Rect r;
+};
+
+constexpr Rect kVowelRect    { 16,  72,  576,  624 };
+constexpr Rect kSpectrumRect { 592, 72,  1184, 334 };
+constexpr Rect kFormantRect  { 592, 350, 1184, 512 };
+constexpr Rect kOutputRect   { 592, 528, 1184, 624 };
+
+constexpr Section kSections[] = {
+	{ "VOWEL SPACE", "drag to blend between vowels",                       Accent::Amber,  kVowelRect    },
+	{ "SPECTRUM",    "the filter as it sounds now",                        Accent::Blue,   kSpectrumRect },
+	{ "FORMANTS",    "width, level, and F3, which the pad does not reach", Accent::Violet, kFormantRect  },
+	{ "OUTPUT",      "",                                                   Accent::Mint,   kOutputRect   },
+};
+constexpr int kNumSections = static_cast<int> (sizeof (kSections) / sizeof (kSections[0]));
+
+//------------------------------------------------------------------------
+// Controls - every parameter that has a knob or a switch
+//------------------------------------------------------------------------
+enum class Kind
+{
+	Knob,     // Panel::Knob - vertical drag
+	Switch    // Panel::SegmentSwitch - one segment per named position
+};
+
+struct Control
+{
+	Steinberg::Vst::ParamID tag;
+	Kind   kind;
+	Accent accent;
+	int    x, y;        // top left of the control's rectangle
+	int    width;
+	int    diameter;    // knobs only; 0 for a switch
+	const char* label;
+	int    height = 0;  // switches only
+};
+
+constexpr Rect controlRect (const Control& c)
+{
+	return { c.x, c.y, c.x + c.width,
+	         c.y + ((c.kind == Kind::Knob) ? c.diameter + kKnobTextBand : c.height) };
+}
+
+/** The formant columns: 192 pixels each, starting inside the section. */
+constexpr int kFormantColLeft  = 606;
+constexpr int kFormantColPitch = 192;
+constexpr int formantCol (int k) { return kFormantColLeft + k * kFormantColPitch; }
+
+constexpr int kFormantKnobTop  = 422;
+constexpr int kFormantKnobDia  = 36;
+constexpr int kFormantKnobW    = 56;
+
+/** EVERY PARAMETER WITH A CONTROL, once each - the tests hold it to that.
+    The Vowel selector is the one stored parameter with no entry: its
+    controls are the five vowel buttons, the Manual button and the vowel
+    circles on the pad, all of which write it through the editor. */
+constexpr Control kControls[] = {
+	// ---- the voice, in the vowel section's title row: it changes what
+	// every vowel on the pad and every button means ----------------------
+	{ kVoice, Kind::Switch, Accent::Amber, 436, 81, 126, 0, "Voice", kTitleSwitchHeight },
+
+	// ---- the glide, beside the buttons that start one -------------------
+	{ kGlide, Kind::Knob, Accent::Violet, 388, 524, 64, 48, "Glide" },
+
+	// ---- the formants: a column each, Freq / Width / Level --------------
+	{ kF1Freq,      Kind::Knob, Accent::Amber,  formantCol (0) + 2,   kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Freq"  },
+	{ kF1Bandwidth, Kind::Knob, Accent::Amber,  formantCol (0) + 62,  kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Width" },
+	{ kF1Level,     Kind::Knob, Accent::Amber,  formantCol (0) + 120, kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Level" },
+	{ kF2Freq,      Kind::Knob, Accent::Blue,   formantCol (1) + 2,   kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Freq"  },
+	{ kF2Bandwidth, Kind::Knob, Accent::Blue,   formantCol (1) + 62,  kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Width" },
+	{ kF2Level,     Kind::Knob, Accent::Blue,   formantCol (1) + 120, kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Level" },
+	{ kF3Freq,      Kind::Knob, Accent::Violet, formantCol (2) + 2,   kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Freq"  },
+	{ kF3Bandwidth, Kind::Knob, Accent::Violet, formantCol (2) + 62,  kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Width" },
+	{ kF3Level,     Kind::Knob, Accent::Violet, formantCol (2) + 120, kFormantKnobTop, kFormantKnobW, kFormantKnobDia, "Level" },
+
+	// ---- the output -----------------------------------------------------
+	{ kMix,        Kind::Knob, Accent::Mint, 786, 538, 72, 34, "Dry / Wet" },
+	{ kOutputTrim, Kind::Knob, Accent::Mint, 876, 538, 72, 34, "Trim" },
+};
+constexpr int kNumControls = static_cast<int> (sizeof (kControls) / sizeof (kControls[0]));
+
+//------------------------------------------------------------------------
+// The views that are not parameter controls
+//------------------------------------------------------------------------
+
+/** The vowel chart. */
+constexpr Rect kPadView { 34, 116, 558, 496 };
+
+/** The five vowel buttons, under the chart, and Manual under them. */
+constexpr int kVowelButtonLeft  = 34;
+constexpr int kVowelButtonTop   = 512;
+constexpr int kVowelButtonW     = 58;
+constexpr int kVowelButtonH     = 46;
+constexpr int kVowelButtonPitch = 64;
+
+constexpr Rect vowelButtonRect (int index)
+{
+	return { kVowelButtonLeft + index * kVowelButtonPitch, kVowelButtonTop,
+	         kVowelButtonLeft + index * kVowelButtonPitch + kVowelButtonW,
+	         kVowelButtonTop + kVowelButtonH };
+}
+
+constexpr Rect kManualButton { 34, 566, 348, 608 };
+
+/** How far through the current glide the DSP is. */
+constexpr Rect kGlideMeter { 466, 538, 558, 576 };
+
+/** The response. */
+constexpr Rect kSpectrumView { 606, 104, 1170, 320 };
+
+/** Points per curve on the spectrum: one every three pixels or better. */
+constexpr int kSpectrumPoints = 240;
+
+/** The spectrum's axes. 80 Hz..8 kHz covers every formant in both
+    tables with room either side. The floor is -66 dB, not the -48 of the
+    design, for the reason SpyResponseDisplay's banner gives: where two
+    formants meet in antiphase the sum digs a notch to -61.5 dB, and at
+    -48 those troughs run off the bottom and the rise between two of them
+    reads as the curve turning round. */
+constexpr double kSpectrumMinHz = 80.0;
+constexpr double kSpectrumMaxHz = 8000.0;
+constexpr double kSpectrumTopDb = 12.0;
+constexpr double kSpectrumFloorDb = -66.0;
+
+//------------------------------------------------------------------------
+// The header
+//------------------------------------------------------------------------
+constexpr Rect kWordmark   { 24,  0,   236, kHeaderHeight };
+constexpr Rect kEngineLine { 252, 20,  1020, 36 };
+constexpr Rect kBypassPill { 1056, 14, 1184, 42 };
+
+//------------------------------------------------------------------------
+// Fixed lettering and rules
+//------------------------------------------------------------------------
+enum class CaptionStyle
+{
+	Block,    // a block's name, small capitals in its colour
+	Note      // ordinary text, grey
+};
+
+struct Caption
+{
+	const char* text;
+	CaptionStyle style;
+	Accent accent;
+	Rect r;
+};
+
+constexpr Caption kCaptions[] = {
+	{ "F1", CaptionStyle::Block, Accent::Amber,  { formantCol (0) + 2, 390, formantCol (0) + 26,  404 } },
+	{ "on the pad", CaptionStyle::Note, Accent::Amber, { formantCol (0) + 28, 390, formantCol (0) + 176, 404 } },
+	{ "F2", CaptionStyle::Block, Accent::Blue,   { formantCol (1) + 2, 390, formantCol (1) + 26,  404 } },
+	{ "on the pad, inverted", CaptionStyle::Note, Accent::Blue, { formantCol (1) + 28, 390, formantCol (1) + 184, 404 } },
+	{ "F3", CaptionStyle::Block, Accent::Violet, { formantCol (2) + 2, 390, formantCol (2) + 26,  404 } },
+	{ "knob only", CaptionStyle::Note, Accent::Violet, { formantCol (2) + 28, 390, formantCol (2) + 176, 404 } },
+
+	{ "stereo, one model", CaptionStyle::Note, Accent::Mint, { 606, 578, 770, 592 } },
+	{ "Dry/Wet and Trim ease in over", CaptionStyle::Note, Accent::Mint, { 978, 556, 1170, 570 } },
+	{ "about 10 ms; the nine formant",  CaptionStyle::Note, Accent::Mint, { 978, 572, 1170, 586 } },
+	{ "values follow the Glide.",       CaptionStyle::Note, Accent::Mint, { 978, 588, 1170, 602 } },
+};
+constexpr int kNumCaptions = static_cast<int> (sizeof (kCaptions) / sizeof (kCaptions[0]));
+
+/** Hairlines: between the buttons and the glide, and between the formant
+    columns. */
+constexpr Rect kRules[] = {
+	{ 370, 516, 371, 606 },
+	{ formantCol (1) - 8, 388, formantCol (1) - 7, 500 },
+	{ formantCol (2) - 8, 388, formantCol (2) - 7, 500 },
+	{ 964, 548, 965, 606 },
+};
+
+//------------------------------------------------------------------------
+// The vowel chart's axes - the parameter ranges, log-scaled
+//------------------------------------------------------------------------
+
+/** The plot inside kPadView: room on the left for the F1 figures, at the
+    top for the axis captions, at the foot for the F2 figures. */
+constexpr int kPadInsetLeft   = 40;
+constexpr int kPadInsetRight  = 18;
+constexpr int kPadInsetTop    = 30;
+constexpr int kPadInsetBottom = 24;
+
+constexpr Rect padPlot ()
+{
+	return { kPadView.left + kPadInsetLeft, kPadView.top + kPadInsetTop,
+	         kPadView.right - kPadInsetRight, kPadView.bottom - kPadInsetBottom };
+}
+
+constexpr double kPadF1Min = kFormantFreqMin[0];
+constexpr double kPadF1Max = kFormantFreqMax[0];
+constexpr double kPadF2Min = kFormantFreqMin[1];
+constexpr double kPadF2Max = kFormantFreqMax[1];
+
+/** 0..1 across the plot: 0 at the HIGHEST F2 (front vowels, left). */
+inline double padU (double f2Hz)
+{
+	return std::log (kPadF2Max / f2Hz) / std::log (kPadF2Max / kPadF2Min);
+}
+
+/** 0..1 down the plot: 0 at the LOWEST F1 (close vowels, top). */
+inline double padV (double f1Hz)
+{
+	return std::log (f1Hz / kPadF1Min) / std::log (kPadF1Max / kPadF1Min);
+}
+
+inline double f2OfPadU (double u)
+{
+	return kPadF2Max * std::pow (kPadF2Min / kPadF2Max, u);
+}
+
+inline double f1OfPadV (double v)
+{
+	return kPadF1Min * std::pow (kPadF1Max / kPadF1Min, v);
+}
+
+/** The vowel circles' radius, which is also how near a click must be to
+    pick that vowel rather than start a drag. */
+constexpr int kVowelCircleRadius = 17;
+
+/** The IPA symbol each vowel button and circle carries, as UTF-8. */
+constexpr const char* const kVowelIpa[kVowelCount] = { "\xC9\x91", "i", "\xC9\xAA", "o", "u" };
+
+/** The order the corner vowels are joined in, round the chart: /i/ /I/
+    /a/ /o/ /u/ - front close, front, open, back, back close. */
+constexpr int kTrapezoidOrder[kVowelCount] = { 1, 2, 0, 3, 4 };
+
+//------------------------------------------------------------------------
+// The arithmetic, asserted rather than trusted
+//------------------------------------------------------------------------
+static_assert (kVowelRect.bottom + kMargin == kEditorHeight, "the vowel section ends a margin above the bottom");
+static_assert (kOutputRect.bottom + kMargin == kEditorHeight, "the output section ends a margin above the bottom");
+static_assert (kSpectrumRect.right + kMargin == kEditorWidth, "the right column ends a margin from the right");
+static_assert (vowelButtonRect (kVowelCount - 1).right <= kRules[0].left - 8,
+               "the five vowel buttons stop short of the rule before the glide");
+static_assert (kEditorWidth == 1200 && kEditorHeight == 640,
+               "the panel changed size - update the banner, docs/panel.png and this assert together");
+
+//------------------------------------------------------------------------
+} // namespace Layout
+} // namespace VocalFilter

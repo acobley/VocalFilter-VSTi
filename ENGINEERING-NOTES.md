@@ -768,6 +768,60 @@ would otherwise chop the ring off.
 
 ## 4. The editor
 
+> **Branch `Design2` (16 Oct 2026) replaces the panel** described in the rest
+> of this section with the "vowel space" panel — section 4c below. The
+> sections after this note describe the SpyBand-slider panel still on `main`;
+> its parameter logic (one write per vowel, capture-then-Manual, knobs showing
+> the live preset, published values on a timer, `showValue`) carried over
+> unchanged, its layout and controls did not.
+
+### 4c. The vowel-space panel (branch Design2)
+
+From `design/VocalFilter-Concept3b-VowelSpace.png`, in R2Synth's idiom.
+1200 × 640, R2Synth's size.
+
+* **The layout is data**: `source/VocalFilterLayout.h`, no VSTGUI, read by
+  the editor, by `tests/LayoutTests.cpp` and by `tools/dump-layout.cpp` →
+  `tools/render-panel.py`. The same arrangement as R2Synth's UpdatedUI branch.
+* **`source/VocalFilterPanelViews.*`** lifts R2Synth's `Knob`,
+  `SegmentSwitch`, palette, faces and `Backdrop` unchanged (accents renamed by
+  colour), and adds `VowelPad`, `Spectrum`, `VowelButton`, `ManualButton`,
+  `GlideMeter` and `BypassPill` in the same no-bitmap idiom.
+* **The vowel chart is the parameter space.** Its axes are the F1 and F2
+  parameter ranges, log-scaled — F2 falling to the right, F1 falling
+  downward, the phonetician's convention — so every point is a reachable
+  setting. `padU/padV` and their inverses live in the layout header so the
+  tests can check the round trip and that all ten vowels land on it.
+* **A drag writes F1 and F2 as one gesture**: `padDragBegin` captures the
+  preset and goes Manual first (so F3, widths and levels keep the vowel's
+  values), then opens `beginEdit` on both; every move is
+  `setParamNormalized` + `performEdit` on both; `padDragEnd` closes both.
+  `close()` closes a drag still open, so a host is never left waiting for an
+  `endEdit`. A click on a vowel circle that does not move more than 4 px
+  selects that vowel instead.
+* **Glide tracking is display only.** On each timer tick the editor compares
+  the target (preset or parameters) with the last one; a change starts a
+  glide from wherever the display last was. Progress is distance remaining
+  over distance at the start, with the nine values each scaled by their
+  range. It needs the processor's published values, so in a host that does
+  not forward them the chart shows the targets and no glide.
+* **No output meter**, though the design drew one: the processor publishes
+  formant values but no levels, and a meter would need new read-only
+  parameters. The space holds a note on smoothing instead.
+* **F1 and F2 also have knobs**, though the design drew them as read-outs
+  ("on the pad") — a knob gives fine control the chart cannot.
+* `VocalFilterControls.*` and `VocalFilterDisplay.*` are no longer on the
+  panel. They are left in `source/` (they still compile) so the two panels can
+  be compared; delete them when the branch is merged.
+
+Verified from the Linux VM: all nine translation units compile with zero
+warnings in our own sources and every `VocalFilter::` symbol resolves;
+`tools/run-tests.sh` passes, including the new layout suite. **Not verified:
+the panel has not been seen in a host.** Build, then check the drag on the
+chart, a vowel click, Manual, automation of Vowel and Voice with the editor
+open, and bypass.
+
+
 `source/VocalFilterControls.{h,cpp}` is **lifted** from
 `~/DXi-DEv/SpyBand-VSTi/source/SpyBandControls.*`, with four changes and no
 others: the namespace is `VocalFilter`; the vocoder-specific views are gone

@@ -1,0 +1,95 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#141518}</style></head><body>
+<script src="common.js"></script>
+<script src="vf.js"></script>
+<script>
+// Concept 3 - a vowel chart you can play. F1 and F2 are the two axes a phonetician
+// plots vowels on (F2 falling to the right, F1 falling downward), so the five
+// presets land where a linguist expects them and the puck is F1 and F2 at once.
+// Pressing a vowel slides the puck along the glide; dragging it is Manual.
+const W = 1200, H = 640, T = 0.62, A = MALE[3], B = MALE[0];
+const lerp = (a, b) => a + (b - a) * T;
+const V = [0, 1, 2].map(j => [0, 1, 2].map(k => +lerp(A[j][k], B[j][k]).toFixed(j === 2 ? 1 : 0)));
+rect(0, 0, W, H, C.ground);
+vfHeader('Engine: 48000 Hz  ·  gliding Oooo → Aaaa  ·  93 of 150 ms');
+
+// ---- VOWEL SPACE -----------------------------------------------------
+section(16, 72, 560, 552, 'VOWEL SPACE', 'the puck is F1 and F2', C.amber, { subx: 122 });
+seg(440, 84, 122, 24, ['Male', 'Female'], 0, C.amber, { size: 10 });
+const cx = 34, cy = 116, cw = 524, ch = 380;
+screen(cx, cy, cw, ch, { nx: 8, ny: 6 });
+const X = f2 => cx + 30 + (Math.log(3000 / f2) / Math.log(3000 / 700)) * (cw - 60);
+const Y = f1 => cy + 26 + (Math.log(f1 / 230) / Math.log(950 / 230)) * (ch - 60);
+// axis ticks
+[2500, 2000, 1500, 1000].forEach(f => text(f1(X(f)), cy + ch - 8, f >= 1000 ? `${f / 1000}k` : f, { size: 9, font: MONO, fill: C.dim, anchor: 'middle' }));
+[300, 500, 700].forEach(f => text(cx + 8, f1(Y(f) + 3), f, { size: 9, font: MONO, fill: C.dim }));
+text(cx + cw - 10, cy + 16, '← F2  front … back', { size: 10, font: MONO, fill: C.blue, anchor: 'end' });
+text(cx + 10, cy + 16, 'F1 ↓  close … open', { size: 10, font: MONO, fill: C.amber });
+// trapezoid through the male corner vowels
+const order = [1, 2, 0, 3, 4];
+const tz = (tab, col, dash) => path('M' + order.map(i => `${f1(X(tab[i][0][1]))},${f1(Y(tab[i][0][0]))}`).join(' L'), col, 1.2, 'none', dash);
+tz(FEMALE, hexA(C.text, 0.16), 'stroke-dasharray="3 4"');
+tz(MALE, hexA(C.amber, 0.35), '');
+for (let i = 0; i < 5; i++) {
+  const fx = X(FEMALE[i][0][1]), fy = Y(FEMALE[i][0][0]);
+  circle(f1(fx), f1(fy), 5, 'none', hexA(C.text, 0.3), 1.2);
+  const mx = X(MALE[i][0][1]), my = Y(MALE[i][0][0]);
+  circle(f1(mx), f1(my), 17, i === 0 ? hexA(C.amber, 0.22) : C.seg, i === 0 ? C.amber : C.capEdge, 1.2);
+  text(f1(mx), f1(my + 6), IPA[i], { size: 16, weight: 700, anchor: 'middle', fill: i === 0 ? C.amber : C.text, font: 'DejaVu Sans, sans-serif' });
+  text(f1(mx), f1(my + 32), VOWELS[i], { size: 9.5, weight: 700, anchor: 'middle', fill: C.subtle });
+}
+// glide trail O -> A and the puck
+const ox = X(A[0][1]), oy = Y(A[0][0]), ax = X(B[0][1]), ay = Y(B[0][0]), px = X(V[0][1]), py = Y(V[0][0]);
+line(f1(ox), f1(oy), f1(ax), f1(ay), hexA(C.violet, 0.35), 2, 'stroke-dasharray="4 4"');
+line(f1(ox), f1(oy), f1(px), f1(py), C.violet, 3);
+circle(f1(px), f1(py), 18, hexA(C.text, 0.07));
+circle(f1(px), f1(py), 9, C.text, C.ground, 2);
+rect(f1(px + 16), f1(py - 34), 132, 36, hexA(C.screen, 0.92), C.border, 6);
+text(f1(px + 24), f1(py - 19), `F1 ${hz(V[0][0])}`, { size: 10, font: MONO, fill: C.amber });
+text(f1(px + 24), f1(py - 5), `F2 ${hz(V[0][1])}`, { size: 10, font: MONO, fill: C.blue });
+text(cx + cw - 10, cy + ch - 22, '○ female means', { size: 9.5, font: MONO, fill: C.dim, anchor: 'end' });
+
+// preset row + glide
+for (let i = 0; i < 5; i++) vowelBtn(34 + i * 64, 512, 58, 46, i, i === 0, { compact: true, big: 16 });
+rect(34, 566, 314, 42, C.seg, C.border, 8);
+lamp(52, 587, false, C.amber, 4.5);
+text(66, 591, 'MANUAL', { size: 10.5, weight: 700, fill: C.muted, ls: 0.4 });
+text(334, 591, 'drag the puck to leave the presets', { size: 9.5, fill: C.subtle, anchor: 'end' });
+line(364, 516, 364, 606, C.rule, 1);
+knob(420, 552, 24, 150 / 2000, C.violet, '150 ms', 'GLIDE');
+// glide progress
+rect(476, 540, 82, 8, C.track, null, 4);
+rect(476, 540, 82 * T, 8, C.violet, null, 4);
+text(517, 566, '93 ms', { size: 9.5, font: MONO, anchor: 'middle', fill: C.violet });
+
+// ---- SPECTRUM --------------------------------------------------------
+section(592, 72, 592, 262, 'SPECTRUM', 'what the puck sounds like', C.blue, { subx: 102 });
+respScreen(606, 104, 564, 216, V, { handles: true, label: 'live · mid-glide', right: `F3 ${hz(V[0][2])}` });
+
+// ---- FORMANTS (fine) -------------------------------------------------
+section(592, 350, 592, 162, 'FORMANTS', 'width, level, and F3, which the pad does not reach', C.violet, { subx: 102 });
+for (let k = 0; k < 3; k++) {
+  const x0 = 606 + k * 192, c = FC[k];
+  if (k) line(x0 - 8, 388, x0 - 8, 500, C.rule, 1);
+  text(x0 + 4, 400, `F${k + 1}`, { size: 11, weight: 800, fill: c });
+  text(x0 + 28, 400, k < 2 ? 'on the pad' : 'knob only', { size: 9.5, fill: C.subtle });
+  if (k === 2) knob(x0 + 30, 440, 15, fracF(2, V[0][2]), c, hz(V[0][2]), 'FREQ', { vs: 9.5 });
+  else { circle(x0 + 30, 440, 15, 'none', hexA(c, 0.35), 1.5, 'stroke-dasharray="2 3"'); text(x0 + 30, 444, '⌖', { size: 13, anchor: 'middle', fill: c }); text(x0 + 30, 468, hz(V[0][k]), { size: 9.5, font: MONO, anchor: 'middle', fill: C.text }); text(x0 + 30, 481, 'FREQ', { size: 9.5, weight: 700, anchor: 'middle', fill: C.title }); }
+  knob(x0 + 90, 440, 15, fracB(V[1][k]), c, `${V[1][k]} Hz`, 'WIDTH', { vs: 9.5 });
+  knob(x0 + 148, 440, 15, fracL(V[2][k]), c, db(V[2][k]), 'LEVEL', { vs: 9.5 });
+}
+
+// ---- OUTPUT ----------------------------------------------------------
+section(592, 528, 592, 96, 'OUTPUT', null, C.mint);
+knob(810, 572, 17, 1, C.mint, '100 %', 'DRY / WET', { vs: 9.5, vgap: 12, lgap: 12 });
+knob(900, 572, 17, 1, C.mint, '0.0 dB', 'TRIM', { vs: 9.5, vgap: 12, lgap: 12 });
+[['L', 0.66], ['R', 0.6]].forEach(([n, v], i) => {
+  const y = 560 + i * 22;
+  text(960, y + 9, n, { size: 10, font: MONO, fill: C.subtle });
+  rect(976, y, 192, 10, C.seg, null, 3);
+  rect(976, y, 192 * v, 10, hexA(C.mint, 0.85), null, 3);
+});
+text(1168, 606, '−9.4 dBFS', { size: 9.5, font: MONO, fill: C.muted, anchor: 'end' });
+text(612, 588, 'stereo, one model', { size: 10, fill: C.subtle });
+
+renderAt(W, H);
+</script></body></html>

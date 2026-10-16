@@ -65,6 +65,24 @@ else
 fi
 
 #-----------------------------------------------------------------------------
+# The layout suite: the panel's tables (source/VocalFilterLayout.h) held to
+# fitting, not overlapping, and the vowel chart being the parameter space.
+# Same SDK-headers-only arrangement as the parameter suite.
+#-----------------------------------------------------------------------------
+if [ -d "$SDK" ]; then
+    if run "building the layout suite" \
+           "$CXX" -std=c++17 -O2 -I"$SDK" -I"$ROOT/source" \
+                  "$ROOT/tests/LayoutTests.cpp" "$ROOT/source/VocalFilterParams.cpp" \
+                  "$ROOT/source/VocalFilterDsp.cpp" -o "$WORK/layouttests"; then
+        run "LayoutTests" "$WORK/layouttests"
+    fi
+else
+    echo
+    echo "=== LayoutTests SKIPPED - no SDK at external/vst3sdk"
+    FAILED=$((FAILED + 1))
+fi
+
+#-----------------------------------------------------------------------------
 # The editor invariant no runtime test can reach.
 #-----------------------------------------------------------------------------
 run "check-editor" python3 "$HERE/check-editor.py"

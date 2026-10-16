@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#141518}</style></head><body>
+<script src="common.js"></script>
+<script src="vf.js"></script>
+<script>
+// Concept 2 - the response display IS the editor. Each formant is a handle on
+// the curve: drag sideways for frequency, up/down for level, wheel or the
+// bracket ends for width. The rows underneath are the same nine values as text.
+const W = 1200, H = 640, SELV = 3, V = MALE[SELV], SEL = 1;
+rect(0, 0, W, H, C.ground);
+vfHeader('Engine: 48000 Hz  ·  Oooo, male  ·  glide 150 ms');
+
+// ---- TRACT -----------------------------------------------------------
+section(16, 72, 1168, 364, 'TRACT', 'drag a peak:  ↔ frequency  ·  ↕ level  ·  wheel: width', C.blue, { subx: 68 });
+// vowel pills in the section header
+const px = 640;
+for (let i = 0; i < 5; i++) {
+  const x = px + i * 62, on = i === SELV;
+  rect(x, 82, 56, 26, on ? C.amber : C.seg, on ? C.amber : C.border, 13);
+  text(x + 19, 100, IPA[i], { size: 14, weight: 700, anchor: 'middle', fill: on ? '#16171a' : C.text, font: 'DejaVu Sans, sans-serif' });
+  text(x + 38, 99.5, VOWELS[i][0], { size: 10, weight: 700, anchor: 'middle', fill: on ? '#3a2a10' : C.subtle });
+}
+seg(px + 316, 82, 76, 26, ['Manual'], -1, C.amber, { size: 10 });
+seg(1040, 82, 130, 26, ['♂ Male', '♀ Female'], 0, C.amber, { size: 10 });
+
+const R = respScreen(30, 118, 1140, 304, V, { handles: true, tags: true, sel: SEL, fLo: 70, fHi: 7000, dbLo: -54, dbHi: 6, nx: 14, ny: 6, topPad: 48, botPad: 20,
+  label: 'sum of the three branches, F2 inverted', right: '−54 … +6 dB' });
+// drag affordance on the selected handle
+const hx = R.fx(V[0][SEL]), hy = R.fy(resp(V, V[0][SEL]).br[SEL]);
+path(`M${hx - 30},${hy} L${hx - 18},${hy - 5} M${hx - 30},${hy} L${hx - 18},${hy + 5}`, hexA(C.blue, 0.8), 1.5);
+path(`M${hx + 30},${hy} L${hx + 18},${hy - 5} M${hx + 30},${hy} L${hx + 18},${hy + 5}`, hexA(C.blue, 0.8), 1.5);
+// ghost of the other voice's Oooo
+const ghost = FEMALE[SELV], gp = [];
+for (let i = 0; i <= 200; i++) { const f = 70 * Math.pow(100, i / 200); gp.push(`${f1(R.fx(f))},${f1(R.fy(resp(ghost, f).sum))}`); }
+path('M' + gp.join(' L'), hexA(C.text, 0.28), 1.2, 'none', 'stroke-dasharray="4 4"');
+text(1158, 152, '- - -  female Oooo, for reference', { size: 9.5, font: MONO, fill: C.dim, anchor: 'end' });
+
+// ---- three formant cards ---------------------------------------------
+const names = ['F1', 'F2', 'F3'], sub = ['jaw open ↔ closed', 'tongue back ↔ front · inverted', 'lip and tongue tip'];
+for (let k = 0; k < 3; k++) {
+  const x = 16 + k * 304, c = FC[k];
+  rect(x, 452, 292, 172, k === SEL ? hexA(c, 0.06) : C.section, k === SEL ? hexA(c, 0.5) : C.border, 10);
+  circle(x + 20, 474, 4.5, c);
+  text(x + 31, 479, names[k], { size: 13, weight: 800, fill: c, ls: 0.4 });
+  text(x + 58, 479, sub[k], { size: 10.5, fill: C.subtle });
+  hbar(x + 18, 512, 258, fracF(k, V[0][k]), c, 'FREQ', hz(V[0][k]));
+  hbar(x + 18, 548, 258, fracB(V[1][k]), c, 'WIDTH', `${V[1][k]} Hz`);
+  hbar(x + 18, 584, 258, fracL(V[2][k]), c, 'LEVEL', db(V[2][k]));
+  text(x + 74, 610, `${FMIN[k]}`, { size: 8.5, font: MONO, fill: C.dim });
+  text(x + 206, 610, `${FMAX[k]} Hz`, { size: 8.5, font: MONO, fill: C.dim, anchor: 'end' });
+}
+
+// ---- output ----------------------------------------------------------
+section(928, 452, 256, 172, 'OUTPUT', null, C.mint);
+knob(972, 528, 19, 1, C.mint, '100 %', 'DRY/WET', { vs: 9.5 });
+knob(1056, 528, 19, 150 / 2000, C.violet, '150 ms', 'GLIDE', { vs: 9.5 });
+knob(1140, 528, 19, 1, C.mint, '0.0 dB', 'TRIM', { vs: 9.5 });
+text(944, 608, 'press a vowel: all nine glide together', { size: 9.5, fill: C.subtle });
+
+renderAt(W, H);
+</script></body></html>

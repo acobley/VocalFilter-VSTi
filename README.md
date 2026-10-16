@@ -7,8 +7,8 @@ vowel on it.
 ![The VocalFilter panel](docs/panel-vowel.png)
 
 *(A layout render from `tools/render-panel.py`, not a screenshot — it is
-generated from the editor's own layout constants so it cannot drift from the
-code.)*
+generated from the editor's own layout tables (`source/VocalFilterLayout.h`)
+and the DSP's own response functions, so it cannot drift from the code.)*
 
 ## What it does
 
@@ -92,8 +92,9 @@ roughly what a diphthong glide takes in speech. Zero is floored at 20 ms — an
 instant jump of F2 from 870 Hz to 2290 Hz is a click.
 
 **Vowel** is a mode. While it is on a preset the DSP uses that vowel's values
-and the nine formant parameters are ignored; touching a slider on the panel
-captures the preset's values and switches back to Manual, so nothing jumps.
+and the nine formant parameters are ignored; touching a formant knob, dragging
+on the vowel chart or pressing **Manual** captures the preset's values and
+switches back to Manual, so nothing jumps.
 
 **Voice** picks which of the two tables a preset comes from. It is read by the
 processor the same way, so it works with the editor closed and under
@@ -101,11 +102,30 @@ automation, and a voice change glides exactly as a vowel change does — it just
 moves F2 by at most 3.8 semitones against up to 16.8, so the same Glide time
 sounds far less dramatic.
 
-The display draws each formant's response — F1 yellow, F2 green, F3 blue — and
-the summed response in white, following the DSP in real time as it glides. The
-axis is fixed at 80 Hz – 8 kHz and +12 to −66 dB so two vowels can be
-compared; the floor is that low because three resonators summed with
-alternating polarity notch far deeper than any of them does alone.
+### The panel
+
+Four sections, in R2Synth's style (design: `design/VocalFilter-Concept3b-VowelSpace.png`).
+
+* **Vowel space** — a vowel chart you can play. F2 runs across (falling to
+  the right) and F1 down (falling downward), the way phoneticians plot
+  vowels, over exactly the two parameters' ranges. The five vowels of the
+  current voice are labelled circles; the other voice's are faint dots.
+  **Click a vowel** to select it; **drag anywhere** to move F1 and F2
+  together (Shift for fine). The white dot is where the DSP is right now, and
+  during a glide its path is drawn from where it started to where it is
+  going. Under the chart: the five vowel buttons, **Manual**, **Glide**, and
+  how far through the current glide the sound is.
+* **Spectrum** — each formant's response in its colour (F1 amber, F2 blue,
+  F3 violet), the summed response in white, a handle on each peak and a
+  bracket for its width. Fixed axes, 80 Hz – 8 kHz and +12 to −66 dB, so two
+  vowels can be compared; the floor is that low because three resonators
+  summed with alternating polarity notch far deeper than any one does.
+* **Formants** — Freq, Width and Level knobs for each formant. While a preset
+  is live they show the preset's values.
+* **Output** — Dry / Wet and Trim. **Bypass** is the pill in the header.
+
+Knobs: drag vertically, Shift for fine, double-click for the default, the
+wheel steps.
 
 ## Building
 
@@ -139,7 +159,7 @@ and `auval -v aufx VcFl AECo`.
 
 ## Tests
 
-Two suites, neither of which needs a host or a build system.
+Three suites, none of which needs a host or a build system. `tools/run-tests.sh` runs them all, with `tests/LayoutTests.cpp` holding the panel's layout tables to fitting and not overlapping.
 
 The DSP is deliberately free of SDK types, so its suite compiles and runs
 standalone:
@@ -180,8 +200,9 @@ failed is a guess.
 | | |
 |---|---|
 | `source/` | the plug-in — `VocalFilterDsp.*` is the audio line and includes no SDK header |
-| `tests/` | `DspTests.cpp`, SDK-free; `ParamsTests.cpp`, headers only |
-| `tools/render-panel.py` | renders the editor layout to `docs/`, parsing the constants out of the headers |
+| `tests/` | `DspTests.cpp`, SDK-free; `ParamsTests.cpp` and `LayoutTests.cpp`, headers only |
+| `tools/render-panel.py` | renders the panel to `docs/` from `tools/dump-layout.cpp`, which reads the layout tables |
+| `design/` | the interface concepts the panel was chosen from |
 | `tools/check-editor.py` | guards one editor invariant no runtime test can reach |
 | `docs/` | those renders, and the signal-path diagram — `docs/README.md` says how each is regenerated |
 | `resource/au-info.plist` | the Audio Unit's identity |
