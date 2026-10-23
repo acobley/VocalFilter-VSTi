@@ -146,6 +146,8 @@ tresult PLUGIN_API VocalFilterController::setComponentState (IBStream* state)
 	{
 		if (!streamer.readDouble (value))
 			break;
+		if (id == kOutputTrim && version < 2)
+			value = trimNormalizedFromV1 (value);   // same remap as the processor
 		setParamNormalized (id, std::min (1.0, std::max (0.0, value)));
 	}
 

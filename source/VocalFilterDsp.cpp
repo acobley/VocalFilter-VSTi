@@ -75,6 +75,20 @@ double trimDb (double normalized)
 }
 
 //------------------------------------------------------------------------
+double trimNormalized (double db)
+{
+	const double clamped = std::min (kTrimMaxDb, std::max (kTrimMinDb, db));
+	return (clamped - kTrimMinDb) / (kTrimMaxDb - kTrimMinDb);
+}
+
+//------------------------------------------------------------------------
+double trimNormalizedFromV1 (double v1Normalized)
+{
+	const double clamped = std::min (1.0, std::max (0.0, v1Normalized));
+	return trimNormalized (kTrimMinDb + clamped * (kTrimV1MaxDb - kTrimMinDb));
+}
+
+//------------------------------------------------------------------------
 double dbToLinear (double db, double floorDb)
 {
 	if (db <= floorDb)

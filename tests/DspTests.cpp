@@ -93,7 +93,7 @@ void applyPatch (Dsp& dsp, const FormantSetting* formants, double mixPercent = 1
 	for (int k = 0; k < kFormantCount; ++k)
 		dsp.setFormant (k, formants[k].freqHz, formants[k].bandwidthHz, formants[k].levelDb);
 	dsp.setMixPercent (mixPercent);
-	dsp.setTrimNormalized (1.0);          // top of travel = unity
+	dsp.setTrimNormalized (trimNormalized (0.0));   // unity
 }
 
 double peak (const std::vector<float>& x)
@@ -127,6 +127,14 @@ int main ()
 	check (std::fabs (trimDb (0.5) - (kTrimMinDb + kTrimMaxDb) / 2.0) < 1e-12,
 	       "trimDb is linear in dB");
 	check (std::fabs (dbToLinear (0.0, kTrimMinDb) - 1.0) < 1e-12, "0 dB is unity");
+	check (kTrimMaxDb == 12.0 && kTrimDefaultDb == 0.0, "the trim boosts to +12 dB, default unity");
+	check (std::fabs (dbToLinear (kTrimMaxDb, kTrimMinDb) - 3.98107) < 1e-4, "+12 dB is x3.98");
+	check (std::fabs (trimDb (trimNormalized (0.0))) < 1e-12 &&
+	       std::fabs (trimDb (trimNormalized (-23.5)) + 23.5) < 1e-12, "trimNormalized inverts trimDb");
+	check (std::fabs (trimDb (trimNormalizedFromV1 (1.0))) < 1e-12,
+	       "a v1 project saved at unity reopens at unity, not +12 dB");
+	check (std::fabs (trimDb (trimNormalizedFromV1 (0.5)) + 30.0) < 1e-12 &&
+	       trimNormalizedFromV1 (0.0) == 0.0, "a v1 trim keeps its dB across the travel");
 	check (std::fabs (dbToLinear (-6.0206, kTrimMinDb) - 0.5) < 1e-4, "-6.02 dB is a half");
 	check (dbToLinear (kLevelMinDb, kLevelMinDb) == 0.0, "a formant at the bottom of travel is silent");
 

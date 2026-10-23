@@ -81,7 +81,7 @@ peak at all — §2d has the measurements.
 | F1 / F2 / F3 **Level** | −40 … +12 dB | 0 / −3.3 / −26.8 |
 | **Dry / Wet** | 0–100 % | 100 |
 | **Glide** | 0–2000 ms | 150 |
-| **Output Trim** | −60 … 0 dB | 0 |
+| **Output Trim** | −60 … +12 dB | 0 |
 | **Vowel** | Manual, Aaaa, Eeee, Iiii, Oooo, Uuuu | Manual |
 | **Voice** | Male, Female | Male |
 

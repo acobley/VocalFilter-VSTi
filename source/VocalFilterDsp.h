@@ -53,6 +53,14 @@ struct FormantSetting
 /** The output trim in dB, from the parameter's normalised value. */
 double trimDb (double normalized);
 
+/** And back: the normalised value for a trim in dB, clamped to travel. */
+double trimNormalized (double db);
+
+/** A trim saved by state version 1 (-60..0 dB travel), as the normalised
+    value that gives the SAME dB on the current travel. Without it a
+    project saved at unity would reopen 12 dB louder. */
+double trimNormalizedFromV1 (double v1Normalized);
+
 /** A linear gain from dB, with `floorDb` and below treated as a true
     silence rather than a very small number. */
 double dbToLinear (double db, double floorDb);
@@ -116,11 +124,20 @@ constexpr int kFormantCount = 3;
  *  ENGINEERING-NOTES DEVIATION 3. */
 constexpr double kFormantPolarity[kFormantCount] = { 1.0, -1.0, 1.0 };
 
-/** The output trim. Top of travel is unity; for a port, make it the
-    ORIGINAL's gain staging and set the default 20 dB below it. */
+/** The output trim. Default is unity; the top 12 dB of travel is BOOST,
+    for a source thin enough that the bank leaves it quiet (a harmonically
+    rich input comes out around -12 dBFS - ENGINEERING-NOTES section 1).
+    Up to 1.0.1.0 the top of travel was unity (kTrimV1MaxDb); see
+    trimNormalizedFromV1 for what that does to a saved project. */
 constexpr double kTrimMinDb     = -60.0;
-constexpr double kTrimMaxDb     =   0.0;
+constexpr double kTrimMaxDb     =  12.0;
 constexpr double kTrimDefaultDb =   0.0;
+constexpr double kTrimV1MaxDb   =   0.0;
+
+/** The state layout's version. 2 = the trim's +12 dB travel: the layout
+    is unchanged, but the trim's NORMALISED value means a different dB, so
+    a version-1 stream's trim is remapped on load. */
+constexpr int kStateVersion = 2;
 
 /** Each formant gets its OWN frequency range rather than one wide range
     shared by all three. Two reasons: a slider spanning 100 Hz to 4 kHz

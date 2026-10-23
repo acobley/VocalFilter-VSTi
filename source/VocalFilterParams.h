@@ -32,7 +32,7 @@ namespace VocalFilter {
 //------------------------------------------------------------------------
 enum Param : Steinberg::Vst::ParamID
 {
-	kOutputTrim,     // dB, top of travel is unity
+	kOutputTrim,     // dB, -60..+12, default unity
 
 	//--------------------------------------------------------------------
 	// The formant bank. APPENDED after kOutputTrim, which is why the trim

@@ -17,13 +17,6 @@ using namespace Steinberg::Vst;
 
 namespace VocalFilter {
 
-namespace {
-
-/** Bumped only if the state layout below changes incompatibly. */
-constexpr int32 kStateVersion = 1;
-
-} // namespace
-
 //------------------------------------------------------------------------
 VocalFilterProcessor::VocalFilterProcessor ()
 {
@@ -389,6 +382,8 @@ tresult PLUGIN_API VocalFilterProcessor::setState (IBStream* state)
 	{
 		if (!streamer.readDouble (value))
 			break;
+		if (id == kOutputTrim && version < 2)
+			value = trimNormalizedFromV1 (value);   // was -60..0 dB, now -60..+12
 		mParams[id] = std::min (1.0, std::max (0.0, value));
 	}
 

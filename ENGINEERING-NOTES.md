@@ -212,9 +212,14 @@ Full-scale input, factory patch:
 The only case that reaches unity is a sine sitting **exactly** on F1, which is
 what a 0 dB constant-peak bandpass is supposed to do. A harmonically rich
 source — the input this is actually for — comes out around −12 dBFS, because
-a formant bank throws most of the spectrum away. So the trim's top of travel
-stays at unity and its default stays there with it; there is no gain staging
-to be 20 dB below, because there is no original.
+a formant bank throws most of the spectrum away. So the trim's default
+stays at unity - there is no gain staging to be 20 dB below, because there is
+no original - and its travel runs on to **+12 dB** above it, which is roughly
+what that −12 dBFS costs. (Up to 1.0.1.0 the top of travel was unity. State
+version 2 marks the change: the layout is the same, but a version-1 stream's
+trim is remapped by `trimNormalizedFromV1` so an old project reopens at the dB
+it was saved at. Host AUTOMATION of the trim is stored normalised by the host
+and cannot be remapped - an old lane plays back louder by up to 12 dB.)
 
 Nothing clips inside a float plug-in, but this is the measurement to repeat
 first after any change to the levels or the topology. A level that clips masks
