@@ -109,7 +109,7 @@ Taken from the finished, notarised and **stapled** package. Stapling changes
 the bytes, so a checksum taken before it does not match what you downloaded.
 
 ```
-SHA-256: <paste from: publish-release.sh writes this>
+SHA-256: c3f2a34c5cc3bd7ab3fc38e881d03df1b9768c093cdd3f484e007b2abdd6d8e5
 ```
 
 ---
