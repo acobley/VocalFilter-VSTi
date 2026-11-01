@@ -18,6 +18,7 @@
 //------------------------------------------------------------------------
 
 #include "VocalFilterDsp.h"
+#include "DenormalGuard.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1027,6 +1028,44 @@ int main ()
 
 		std::printf ("     tail: %d samples (%.0f ms at 44.1 k)\n",
 		             dsp.tailSamples (), 1000.0 * dsp.tailSamples () / kRate);
+	}
+
+	section ("10. Denormals: Mix and Trim aimed at zero land on zero");
+	{
+		// Mix at 0 % and Trim at the bottom are both EXACTLY 0. Before
+		// smoothTowards, the one-pole aimed at them stuck at the bottom of
+		// the denormal range for good (~2.4e-321 after 15 s at 48 kHz),
+		// and every multiply by it was slow on x86 from then on.
+		const double coeff = 1.0 - std::exp (-1.0 / (0.020 * 48000.0));   // kSmoothSeconds, 48 kHz
+		double v = 1.0, old = 1.0;
+		bool sub = false;
+		for (long i = 0; i < 48000L * 60; ++i)
+		{
+			v = smoothTowards (v, 0.0, coeff);
+			old += (0.0 - old) * coeff;
+			sub = sub || std::fpclassify (v) == FP_SUBNORMAL;
+		}
+		check (v == 0.0 && ! sub, "a smoother aimed at 0 lands on exactly 0, never denormal");
+		check (old != 0.0 && std::fpclassify (old) == FP_SUBNORMAL,
+		       "NEGATIVE CONTROL: the old recursion is stuck at a denormal after a minute");
+
+		double u = 0.0;
+		for (long i = 0; i < 48000L * 2; ++i)
+			u = smoothTowards (u, 1.0, coeff);
+		check (u == 1.0, "aimed at unity it lands on exactly 1.0");
+
+		// The guard process() runs under. Every value through memory: the
+		// guard orders memory accesses round its mode switch.
+		if (ScopedFlushDenormals::supported ())
+		{
+			volatile float tiny = 1.0e-37f, half = 0.01f;
+			volatile float before = tiny * half;
+			volatile float inside = 1.f;
+			{ ScopedFlushDenormals guard; inside = tiny * half; }
+			volatile float after = tiny * half;
+			check (before != 0.f && inside == 0.f && after == before,
+			       "ScopedFlushDenormals: flush-to-zero inside, the host's mode restored after");
+		}
 	}
 
 	std::printf ("\n%s\n", gFailures == 0 ? "all tests passed" : "TESTS FAILED");

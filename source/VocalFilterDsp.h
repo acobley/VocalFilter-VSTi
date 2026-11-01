@@ -65,6 +65,24 @@ double trimNormalizedFromV1 (double v1Normalized);
     silence rather than a very small number. */
 double dbToLinear (double db, double floorDb);
 
+/** One step of the Mix / Trim one-pole, SNAPPING onto the target once
+    within 1e-9 of it (about -180 dB).
+
+    Without the snap, a smoother aimed at exactly 0 - Mix at 0 % (fully
+    dry, an ordinary A/B setting) or Trim at the bottom, which
+    dbToLinear makes exactly 0 - never gets there: about 15 s later it
+    reaches the bottom of the denormal range and the rounding holds it
+    there, as a denormal, for good, and every multiply by it is slow on
+    x86 (AUDIT-denormals-aliasing.md). The snap also makes any settled
+    value EXACT. */
+inline double smoothTowards (double value, double target, double coeff)
+{
+	if (value == target)
+		return value;
+	value += (target - value) * coeff;
+	return (value - target < 1e-9 && target - value < 1e-9) ? target : value;
+}
+
 /** The COMPLEX response of ONE formant's bandpass at `freqHz`, excluding
     its level. Exactly the filter the DSP runs - same clamps, same
     coefficients - so a curve drawn from this cannot disagree with what is

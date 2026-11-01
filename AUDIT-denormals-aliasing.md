@@ -23,7 +23,7 @@ needs only that file.
 | **R2Synth** | Handled | **Problem.** MS-20 and MS-20 Late filters at high resonance and bright cutoff: alias spurs at −36 to −47 dB at 1×, −63 to −70 dB at 2× (measured) | **3: fix** |
 | **FilterDrum** | Handled | **Problem.** Self-oscillation above ~4 kHz: alias tones at −26 / −29 dB right beside a 6 kHz pitch (measured) | **4: fix** |
 | **ForTran** | Minor: output gain smoother at 0 | **Problem.** Partials above Nyquist are not culled; notes from about D♯7 up alias | **5: fix** |
-| **VocalFilter** | Minor: Mix and Trim smoothers stick when aimed at 0 | None (linear) | 6: tidy |
+| **VocalFilter** | **Fixed 1 Nov.** Was: Mix and Trim smoothers stick when aimed at 0 | None (linear) | done |
 | **SampleDrum** | Handled | Minor: linear interpolation when a file's rate is above the session's | 7: tidy |
 | **SpyBand** | Handled | None that matters | none |
 
@@ -207,6 +207,8 @@ attenuated. Two ways to fix it:
 ## C. This project's findings
 
 ### VocalFilter: denormals, priority 6 (tidy)
+
+> **Status: fixed 1 Nov 2026** on VocalFilter branch `denormal-smoothers` (see its `ENGINEERING-NOTES.md` §2b). Mix and Trim go through `smoothTowards`, which snaps to its target within 1e-9, and the guard wraps `process()`.
 
 **Finding.**
 

@@ -747,6 +747,39 @@ properly this note is what fails and points at what was rejected.
 
 ---
 
+## 2b. Denormals: Mix and Trim aimed at zero (1 Nov 2026)
+
+From the DXi-DEv audit (`AUDIT-denormals-aliasing.md`). The formant biquads and
+the output already flushed at 1e-25. The Mix and Trim smoothers did not, and
+both can be aimed at **exactly zero**: Mix at 0 % (fully dry, an ordinary A/B
+setting), and Trim at the bottom of its travel, where `dbToLinear` returns 0.0.
+
+A one-pole `x += (0 − x) × c` never reaches zero. About 15 s later, at 48 kHz,
+`x` reaches the bottom of the denormal range, where `x × c` rounds to zero, so
+it stops there, as a denormal, for good. From then on every sample makes two
+or four denormal multiplies. Project6 measured the same pattern at about 30×
+the cost of the loop on x86. VocalFilter builds for the host architecture only,
+so on an Apple Silicon Mac the cost is small, but the fix is two lines.
+
+* **`smoothTowards` (`VocalFilterDsp.h`)**: the same one-pole, then exactly the
+  target once within 1e-9 (about −180 dB). Used by Mix and Trim. Any settled
+  value is now exact.
+* **`ScopedFlushDenormals` (`source/DenormalGuard.h`)** sets flush-to-zero for
+  the length of `VocalFilterProcessor::process` and restores the host's mode on
+  return. This is ForTran's copy of the header, with `"memory"` clobbers on the
+  FPCR asm and a barrier beside `_mm_setcsr`. Without them the compiler may move
+  arithmetic across the mode switch.
+
+`DspTests` section 10 checks:
+
+* aimed at 0, a smoother lands on exactly 0 and is never denormal; the old
+  recursion is the negative control, and is stuck at a denormal after a minute;
+* aimed at 1, it lands on exactly 1;
+* the guard flushes, then restores.
+
+Adding `DenormalGuard.h` adds a file to `source/`, so re-run `./setup-xcode.sh`
+before the next Xcode build.
+
 ## 3. Deliberate omissions, and where the trap is when you undo them
 
 **No `processContextRequirements`.** Since VST3 3.7 the `ProcessContext` is

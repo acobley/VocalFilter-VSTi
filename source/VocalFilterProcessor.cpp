@@ -3,6 +3,7 @@
 //------------------------------------------------------------------------
 
 #include "VocalFilterProcessor.h"
+#include "DenormalGuard.h"
 #include "VocalFilterIDs.h"
 
 #include "base/source/fstreamer.h"
@@ -246,6 +247,10 @@ void VocalFilterProcessor::publishLiveValues (IParameterChanges* out)
 //------------------------------------------------------------------------
 tresult PLUGIN_API VocalFilterProcessor::process (ProcessData& data)
 {
+	// Flush-to-zero for this call only; the host's FPU mode comes back on
+	// return. See DenormalGuard.h.
+	ScopedFlushDenormals noDenormals;
+
 	applyParameterChanges (data.inputParameterChanges);
 	pushParameters ();
 

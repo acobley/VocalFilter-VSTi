@@ -352,8 +352,8 @@ void Dsp::process (const float* inLeft, const float* inRight,
 			f.bw.tick ();
 			f.gain.tick ();
 		}
-		mMix  += (mMixTarget  - mMix)  * mSmoothCoeff;
-		mTrim += (mTrimTarget - mTrim) * mSmoothCoeff;
+		mMix  = smoothTowards (mMix,  mMixTarget,  mSmoothCoeff);
+		mTrim = smoothTowards (mTrim, mTrimTarget, mSmoothCoeff);
 
 		if (--mCoeffCountdown <= 0)
 		{
