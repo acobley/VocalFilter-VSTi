@@ -89,11 +89,13 @@ biquad update is a sin and a cos — while the parameters feeding them are
 smoothed **per sample** over 20 ms. Slamming F2 end to end every 64 samples
 moves the output by at most 0.04 between adjacent samples.
 
-Two clamps, and both are load-bearing: the centre frequency is held below
-0.45 × Nyquist, where the bilinear transform's warping stops a bandpass
-behaving like one, and **Q is capped at 60**. Nothing stops a host automating
-Width to its minimum while Freq is at its maximum, which is a Q of 200 and a
-filter that rings for a second and a half.
+Two clamps. The centre frequency is held below **0.45 × the sample rate**
+(0.9 × Nyquist), short of where the bilinear transform's warping stops a
+bandpass behaving like one. That one is a backstop only: the formant ranges
+stop at 4 kHz, far below it at any supported rate. **Q is capped at 60**, and
+that one is load-bearing: nothing stops a host automating Width to its
+minimum while Freq is at its maximum, which is a Q of 200 and a filter that
+rings for a second and a half.
 
 ### DEVIATION 1 — `bankMagnitude` sums COMPLEX responses, and had to be told to
 

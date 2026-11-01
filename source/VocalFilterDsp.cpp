@@ -25,14 +25,18 @@ inline float flush (float x)
 /** Clamps shared by the running filter and by bandpassMagnitude, so a
     curve drawn from the one cannot disagree with the other.
 
-    The frequency ceiling keeps the resonator well clear of Nyquist, where
-    the bilinear transform's warping makes a bandpass stop behaving like
-    one. The Q ceiling is the guard against unbounded resonance: nothing
+    The frequency ceiling, 0.45 x the sample rate (0.9 x Nyquist), keeps
+    the resonator off Nyquist itself, where the bilinear transform's
+    warping makes a bandpass stop behaving like one. It is a backstop
+    only: kFormantFreqMax stops every centre at 4 kHz or below, far under
+    it at any supported rate.
+
+    The Q ceiling is the guard against unbounded resonance: nothing
     stops a host automating the bandwidth to its minimum while the centre
     frequency is at its maximum, which is a Q of 200 and a filter that
     rings for a second and a half. */
 constexpr double kMinCentreHz = 20.0;
-constexpr double kNyquistFraction = 0.45;
+constexpr double kMaxCentreFraction = 0.45;
 constexpr double kMinQ = 0.3;
 constexpr double kMaxQ = 60.0;
 
@@ -42,7 +46,7 @@ BandpassCoeffs bandpassCoeffs (double centreHz, double bandwidthHz, double sampl
 {
 	const double fs = (sampleRate > 0.0) ? sampleRate : 44100.0;
 
-	double f0 = std::min (std::max (centreHz, kMinCentreHz), fs * kNyquistFraction);
+	double f0 = std::min (std::max (centreHz, kMinCentreHz), fs * kMaxCentreFraction);
 	double bw = std::max (bandwidthHz, 1.0);
 	double q  = std::min (std::max (f0 / bw, kMinQ), kMaxQ);
 
