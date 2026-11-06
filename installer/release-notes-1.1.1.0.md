@@ -91,7 +91,7 @@ Taken from the finished, notarised and **stapled** package. Stapling changes
 the bytes, so a checksum taken before it does not match what you downloaded.
 
 ```
-SHA-256: <paste from: shasum -a 256 installer/VocalFilter-1.1.1.0.pkg>
+SHA-256: 9eb80a3143db2c52fa653759bf391c9cf2ae11306972b4981a87e71b72114ecf
 ```
 
 ---
