@@ -815,6 +815,65 @@ would otherwise chop the ring off.
 > the live preset, published values on a timer, `showValue`) carried over
 > unchanged, its layout and controls did not.
 
+### 4d. The black panel (branch `PolivoksPanel`, 10 Nov 2026)
+
+From `design/VocalFilter-Polivoks-1-BlackPanel.png` (design 1 of three
+Polivoks-style skins, chosen 10 Nov 2026): R2Synth's black panel
+(`R2Synth-VSTi`, branch `PolivoksUI`, 22 Oct 2026) on **the 4c layout and
+the same parameters** — the processor, controller and DSP are untouched, and
+the editor's parameter logic is unchanged.
+
+- **Look**: matte black (`#121212`), white printing, each section boxed in a
+  thin white line with its title in its own white-outlined box; black
+  knurled knobs (24 teeth) with a white line and a printed 11-tick scale —
+  no value arcs; the Voice switch a white-framed slot, the chosen voice
+  printed white; the five vowels and Manual are black keys, each with a red
+  lamp that lights while it is the one selected; the bypass control a
+  red-framed window with a lamp; corner screws; a white rule under the
+  header. The formant colours (F1 amber, F2 blue, F3 violet) stay on the
+  F1/F2/F3 headings and in both displays — the only colour on the panel
+  besides the red lamps.
+- **The displays keep their content** — chart, vowels, trapezoids, dot,
+  readout, glide path, spectrum curves, handles, brackets, axes. Only the
+  glass changed: each sits in a black cut-out drawn inside its own view
+  (`drawGlass`), the glass 2.5 px in, a darker grid.
+- **The lettering**: every word on the panel — titles, readings, labels,
+  captions, the axes, the engine line, the keys — is drawn in the 70s
+  sci-fi face, stroked paths, no font. New header **`source/SciFiLettering.h`**
+  (VSTGUI-free), R2Synth's with four marks added (`← … ○ ;`) and **five
+  lower-case IPA glyphs** (i, ɪ, o, u, ɑ) drawn on the x-height and reached
+  only by a `Style` with `keepCase` — /i/ and /ɪ/ differ only in case, so the
+  face's capitals-only rule could not hold on the vowels. `Panel::drawLettering`
+  strokes it (R2Synth's, unchanged). The styles are `Layout::kText*`. The
+  engine line is a `Panel::TextLine` now, not a `CTextLabel`.
+- **Layout moves** (the only ones): the wordmark is wider, so `kWordmark`
+  ends at 292, the header divider is at 306 and the engine line starts at
+  320; the Formants subtitle and the Output note are shortened to fit the
+  wider face ("width, level, and F3 - off the pad"; "Mix + Trim ease in / over
+  10 ms; formants / follow the Glide"); the Manual hint is
+  `Layout::kManualHint`; sections have 3 px corners.
+- **Wear** — **new header `source/PanelWear.h`**: R2Synth's "Studio Worn"
+  turned down ("mildly worn only"): fewer and fainter haze blobs, scratches,
+  specks and fibres; fewer, fainter knob scuffs; dust and one fingerprint on
+  each screen's glass (`kGlass`: the chart, the spectrum). Generated from a
+  fixed seed with its own SplitMix64 and one draw per statement, so every
+  machine makes the same marks. `Backdrop` draws the panel's (only those
+  touching the clip); each `Knob` takes its own via `setWear` (stored
+  relative to the pointer, so it turns with the knob); `VowelPad` and
+  `Spectrum` draw their glass marks over the picture. No bitmaps.
+- **Tests**: `LayoutTests` measures every fit with `Lettering::width()`
+  (every knob's widest reading over its whole range, labels, captions,
+  titles and subtitles against the Voice switch, the longest engine line,
+  the keys, the switch, the bypass window), tests the face (every glyph
+  parses and stays on its grid, every fixed word has its glyphs, the IPA
+  keeps its case and /i/ ≠ /ɪ/), and holds the wear to the panel, off the
+  glass, and faint. `dump-layout` prints the styles, glyphs, title boxes and
+  wear; `render-panel.py` was rewritten on R2Synth's helpers to stroke them;
+  `docs/panel*.png` re-rendered.
+- **Two new source files** (`SciFiLettering.h`, `PanelWear.h`): re-run
+  `./setup-xcode.sh` (or cmake configure) — the pre-build source guard will
+  otherwise stop the Xcode build.
+
 ### 4c. The vowel-space panel (branch Design2)
 
 From `design/VocalFilter-Concept3b-VowelSpace.png`, in R2Synth's idiom.

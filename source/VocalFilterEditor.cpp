@@ -195,6 +195,7 @@ void VocalFilterEditor::addControl (const Layout::Control& c)
 		knob->setLabel (c.label ? c.label : paramDef (tag).title);
 		const ParamDef& def = paramDef (tag);
 		knob->setFormatter ([def] (float normalized) { return readout (def, normalized); });
+		knob->setWear (Wear::knobWear (Wear::controlIndex (tag)));
 		control = knob;
 	}
 
@@ -205,21 +206,6 @@ void VocalFilterEditor::addControl (const Layout::Control& c)
 	if (mController)
 		showValue (control, mController->getParamNormalized (tag));
 	frame->addView (control);
-}
-
-//------------------------------------------------------------------------
-CTextLabel* VocalFilterEditor::addTextLine (const Layout::Rect& r, CFontRef font, const CColor& colour)
-{
-	auto* label = new CTextLabel (toCRect (r));
-	label->setFont (font);
-	label->setFontColor (colour);
-	label->setBackColor (kTransparentCColor);
-	label->setFrameColor (kTransparentCColor);
-	label->setStyle (CParamDisplay::kNoFrame);
-	label->setHoriAlign (kLeftText);
-	label->setMouseEnabled (false);
-	frame->addView (label);
-	return label;
 }
 
 //------------------------------------------------------------------------
@@ -236,7 +222,8 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 	frame->addView (new Panel::Backdrop (frameSize));
 
 	// ---- the header: the engine line and bypass -------------------------
-	mEngineLine = addTextLine (Layout::kEngineLine, Panel::fontSubtitle (), Panel::Palette::kSubtle);
+	mEngineLine = new Panel::TextLine (toCRect (Layout::kEngineLine), Layout::kTextEngine, Panel::Palette::kInkSoft);
+	frame->addView (mEngineLine);
 	{
 		auto* bypass = new Panel::BypassPill (toCRect (Layout::kBypassPill), this,
 		                                      static_cast<int32_t> (kBypass));
@@ -248,6 +235,7 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 
 	// ---- the vowel chart ---------------------------------------------------
 	mPad = new Panel::VowelPad (toCRect (Layout::kPadView), this);
+	mPad->setWear (Wear::glassWear (0));
 	frame->addView (mPad);
 
 	// ---- the five vowel buttons, and Manual --------------------------------
@@ -262,8 +250,7 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 		mVowelButtons[v] = button;
 		frame->addView (button);
 	}
-	mManualButton = new Panel::ManualButton (toCRect (Layout::kManualButton),
-	                                         "drag on the chart to leave the presets");
+	mManualButton = new Panel::ManualButton (toCRect (Layout::kManualButton), Layout::kManualHint);
 	mManualButton->setHandler ([this] { captureAndGoManual (); });
 	frame->addView (mManualButton);
 
@@ -272,6 +259,7 @@ bool PLUGIN_API VocalFilterEditor::open (void* parent, const PlatformType& platf
 
 	// ---- the spectrum ---------------------------------------------------------
 	mSpectrum = new Panel::Spectrum (toCRect (Layout::kSpectrumView));
+	mSpectrum->setWear (Wear::glassWear (1));
 	frame->addView (mSpectrum);
 
 	// ---- every knob and switch, from the table ----------------------------
@@ -403,8 +391,7 @@ void VocalFilterEditor::refreshDisplay ()
 			line += std::string (vowelSelectionName (selector)) + ", "
 			      + (voice == kVoiceFemale ? "female" : "male");
 
-		if (line != mEngineLine->getText ().getString ())
-			mEngineLine->setText (line.c_str ());
+		mEngineLine->setText (line);   // repaints only if the words changed
 	}
 }
 

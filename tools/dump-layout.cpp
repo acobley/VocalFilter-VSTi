@@ -4,13 +4,17 @@
 // tools/render-panel.py draws docs/panel.png from this. The geometry
 // comes from VocalFilterLayout.h - the tables the editor builds from - and
 // every curve and value from the DSP's own functions, so the picture is
-// the panel as built, not a drawing of it.
+// the panel as built, not a drawing of it. Since the black panel (10 Nov
+// 2026) it also prints the lettering's styles and every glyph, parsed by
+// SciFiLettering.h, and every mark of the wear from PanelWear.h, so the
+// script keeps no copy of the face and no seed of its own.
 //
 //     c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk tools/dump-layout.cpp
 //         source/VocalFilterParams.cpp source/VocalFilterDsp.cpp -o /tmp/dump-layout
 //     /tmp/dump-layout [selector 0..5] [voice 0..1] > layout.json
 //------------------------------------------------------------------------
 
+#include "PanelWear.h"
 #include "VocalFilterLayout.h"
 
 #include <algorithm>
@@ -68,6 +72,160 @@ std::string readout (const ParamDef& def, double normalized)
 	return buffer;
 }
 
+std::string rectStr (const Rect& r)
+{
+	return "[" + std::to_string (r.left) + "," + std::to_string (r.top) + "," + std::to_string (r.right) + "," +
+	       std::to_string (r.bottom) + "]";
+}
+
+std::string num (double v)
+{
+	char t[32];
+	std::snprintf (t, sizeof (t), "%.3f", v);
+	return t;
+}
+
+std::string style (const Lettering::Style& s)
+{
+	return "{\"cap\": " + num (s.cap) + ", \"weight\": " + num (s.weight) + ", \"track\": " + num (s.track) +
+	       ", \"keepCase\": " + (s.keepCase ? "true" : "false") + "}";
+}
+
+std::string box (const Box& b)
+{
+	return "[" + num (b.left) + "," + num (b.top) + "," + num (b.right) + "," + num (b.bottom) + "]";
+}
+
+std::string commands (const char* path)
+{
+	std::string out = "[";
+	bool first = true;
+	for (const auto& c : Lettering::parse (path))
+	{
+		out += first ? "" : ",";
+		first = false;
+		out += "[\"" + std::string (1, c.op) + "\"," + num (c.x1) + "," + num (c.y1) + "," + num (c.x) + "," + num (c.y) + "]";
+	}
+	return out + "]";
+}
+
+std::string pts (const std::vector<Wear::Pt>& v)
+{
+	std::string out = "[";
+	char t[48];
+	for (size_t i = 0; i < v.size (); ++i)
+	{
+		std::snprintf (t, sizeof (t), "%s%.3f,%.3f", i ? "," : "", v[i].x, v[i].y);
+		out += t;
+	}
+	return out + "]";
+}
+
+std::string lines (const std::vector<Wear::Line>& v)
+{
+	std::string out = "[";
+	for (size_t i = 0; i < v.size (); ++i)
+		out += std::string (i ? "," : "") + "{\"w\": " + num (v[i].width) + ", \"a\": " +
+		       std::to_string (v[i].alpha) + ", \"pts\": " + pts (v[i].pts) + "}";
+	return out + "]";
+}
+
+std::string specks (const std::vector<Wear::Speck>& v)
+{
+	std::string out = "[";
+	for (size_t i = 0; i < v.size (); ++i)
+		out += std::string (i ? "," : "") + "[" + num (v[i].x) + "," + num (v[i].y) + "," + num (v[i].r) + "," +
+		       std::to_string (v[i].alpha) + "]";
+	return out + "]";
+}
+
+std::string polar (const std::vector<Wear::PolarSpeck>& v)
+{
+	std::string out = "[";
+	for (size_t i = 0; i < v.size (); ++i)
+		out += std::string (i ? "," : "") + "[" + num (v[i].radius) + "," + num (v[i].angle) + "," + num (v[i].r) +
+		       "," + std::to_string (v[i].alpha) + "]";
+	return out + "]";
+}
+
+std::string rgb (const Wear::Rgb& c)
+{
+	return "[" + std::to_string (c.r) + "," + std::to_string (c.g) + "," + std::to_string (c.b) + "]";
+}
+
+void printWear ()
+{
+	using namespace Wear;
+	const PanelWear w = panelWear ();
+	std::printf ("  \"wear\": {\n");
+	std::printf ("    \"colours\": {\"dust\": %s, \"speck\": %s, \"scratch\": %s, \"scuff\": %s, \"knurlDust\": %s, "
+	             "\"glassDust\": %s, \"print\": %s, \"sheen\": %s},\n",
+	             rgb (kDust).c_str (), rgb (kSpeck).c_str (), rgb (kScratch).c_str (), rgb (kScuff).c_str (),
+	             rgb (kKnurlDust).c_str (), rgb (kGlassDust).c_str (), rgb (kPrint).c_str (), rgb (kSheen).c_str ());
+
+	std::string haze = "[";
+	for (size_t i = 0; i < w.haze.size (); ++i)
+		haze += std::string (i ? "," : "") + "[" + num (w.haze[i].x) + "," + num (w.haze[i].y) + "," +
+		        num (w.haze[i].r) + "," + std::to_string (w.haze[i].alpha) + "]";
+	std::printf ("    \"haze\": %s],\n", haze.c_str ());
+
+	std::string drifts = "[";
+	for (size_t i = 0; i < w.drifts.size (); ++i)
+		drifts += std::string (i ? "," : "") + "[" + rectStr (w.drifts[i].r) + "," + std::to_string (w.drifts[i].fromX) +
+		          "," + std::to_string (w.drifts[i].fromY) + "," + std::to_string (w.drifts[i].alpha) + "]";
+	std::printf ("    \"drifts\": %s],\n", drifts.c_str ());
+
+	std::string rings = "[";
+	for (size_t i = 0; i < w.rings.size (); ++i)
+	{
+		const auto& f = w.rings[i];
+		rings += std::string (i ? "," : "") + "[" + num (f.cx) + "," + num (f.cy) + "," + num (f.inner) + "," +
+		         num (f.peak) + "," + num (f.outer) + "," + std::to_string (f.alpha) + "]";
+	}
+	std::printf ("    \"rings\": %s],\n", rings.c_str ());
+	std::printf ("    \"scratches\": %s,\n", lines (w.scratches).c_str ());
+	std::printf ("    \"specks\": %s,\n", specks (w.specks).c_str ());
+	std::printf ("    \"fibres\": %s,\n", lines (w.fibres).c_str ());
+
+	// one entry per control, in kControls order: a knob's wear, or
+	// nothing for the switch
+	std::printf ("    \"controls\": [\n");
+	for (int i = 0; i < kNumControls; ++i)
+	{
+		const char* end = (i + 1 < kNumControls) ? "," : "";
+		if (kControls[i].kind == Kind::Knob)
+		{
+			const KnobWear k = knobWear (i);
+			std::string scuffs = "[";
+			for (size_t j = 0; j < k.scuffs.size (); ++j)
+			{
+				const auto& a = k.scuffs[j];
+				scuffs += std::string (j ? "," : "") + "[" + num (a.radius) + "," + num (a.start) + "," +
+				          num (a.span) + "," + num (a.width) + "," + std::to_string (a.alpha) + "]";
+			}
+			std::printf ("      {\"scuffs\": %s], \"grit\": %s, \"sheen\": %d, \"knurl\": %d}%s\n", scuffs.c_str (),
+			             polar (k.grit).c_str (), k.sheen, k.knurlAlpha, end);
+		}
+		else
+			std::printf ("      {}%s\n", end);
+	}
+	std::printf ("    ],\n");
+
+	// one entry per screen, in Wear::kGlass order: the chart, the spectrum
+	const int screens = Detail::kNumGlass;
+	std::printf ("    \"glass\": [\n");
+	for (int i = 0; i < screens; ++i)
+	{
+		const GlassWear g = glassWear (i);
+		std::string prints = "[";
+		for (size_t j = 0; j < g.prints.size (); ++j)
+			prints += std::string (j ? "," : "") + lines (g.prints[j].ridges);
+		std::printf ("      {\"dust\": %s, \"fibres\": %s, \"prints\": %s]}%s\n", specks (g.dust).c_str (),
+		             lines (g.fibres).c_str (), prints.c_str (), (i + 1 < screens) ? "," : "");
+	}
+	std::printf ("    ]\n},\n");
+}
+
 } // namespace
 
 int main (int argc, char** argv)
@@ -93,14 +251,42 @@ int main (int argc, char** argv)
 	rect ("wordmark", kWordmark);
 	rect ("engineLine", kEngineLine);
 	rect ("bypass", kBypassPill);
+	std::printf ("\"headerDivider\": %d, \"wordmarkGap\": %d, \"sectionRadius\": %d,\n", kHeaderDivider,
+	             kWordmarkGap, kSectionRadius);
+	std::printf ("\"knobGap\": %d, \"knobValueH\": %d, \"knobLabelH\": %d,\n", kKnobGap, kKnobValueH, kKnobLabelH);
+	std::printf ("\"manualHint\": \"%s\",\n", esc (kManualHint).c_str ());
+	std::printf ("\"screws\": [");
+	for (size_t i = 0; i < sizeof (kScrews) / sizeof (kScrews[0]); ++i)
+		std::printf ("%s[%d,%d]", i ? "," : "", kScrews[i].x, kScrews[i].y);
+	std::printf ("],\n");
+
+	// ---- the lettering: the styles, and every glyph parsed -----------------
+	std::printf ("\"styles\": {\"wordmark\": %s, \"title\": %s, \"subtitle\": %s, \"block\": %s, \"note\": %s,\n"
+	             "  \"label\": %s, \"value\": %s, \"engine\": %s, \"pill\": %s, \"hint\": %s, \"screen\": %s,\n"
+	             "  \"scale\": %s, \"ipaKey\": %s, \"ipaChart\": %s},\n",
+	             style (kTextWordmark).c_str (), style (kTextTitle).c_str (), style (kTextSubtitle).c_str (),
+	             style (kTextBlock).c_str (), style (kTextNote).c_str (), style (kTextLabel).c_str (),
+	             style (kTextValue).c_str (), style (kTextEngine).c_str (), style (kTextPill).c_str (),
+	             style (kTextHint).c_str (), style (kTextScreen).c_str (), style (kTextScale).c_str (),
+	             style (kTextIpaKey).c_str (), style (kTextIpaChart).c_str ());
+	std::printf ("\"space\": %s,\n\"glyphs\": {\n", num (Lettering::kSpace).c_str ());
+	for (uint32_t c = 1; c < 0x2600; ++c)
+		if (const Lettering::Glyph* g = Lettering::glyphFor (c))
+			std::printf ("  \"%u\": [%s, %s],\n", c, num (g->advance).c_str (), commands (g->path).c_str ());
+	std::printf ("  \"missing\": [%s, %s]\n},\n", num (Lettering::missingGlyph ().advance).c_str (),
+	             commands (Lettering::missingGlyph ().path).c_str ());
+
+	printWear ();
 
 	std::printf ("\"sections\": [\n");
 	for (int i = 0; i < kNumSections; ++i)
 	{
 		const auto& s = kSections[i];
-		std::printf ("  {\"title\": \"%s\", \"subtitle\": \"%s\", \"accent\": \"%s\", \"r\": [%d, %d, %d, %d]}%s\n",
+		std::printf ("  {\"title\": \"%s\", \"subtitle\": \"%s\", \"accent\": \"%s\", \"r\": [%d, %d, %d, %d], "
+		             "\"titleBox\": %s, \"subtitleLeft\": %s}%s\n",
 		             esc (s.title).c_str (), esc (s.subtitle).c_str (), accentName (s.accent),
-		             s.r.left, s.r.top, s.r.right, s.r.bottom, i + 1 < kNumSections ? "," : "");
+		             s.r.left, s.r.top, s.r.right, s.r.bottom, box (titleBox (s)).c_str (),
+		             num (subtitleLeft (s)).c_str (), i + 1 < kNumSections ? "," : "");
 	}
 	std::printf ("],\n");
 

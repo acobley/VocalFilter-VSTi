@@ -28,6 +28,20 @@
 // editor drives, and every curve from bandpassResponse()/bankMagnitude(),
 // the functions the DSP's own coefficients come from.
 //
+// REDRESSED AS THE BLACK PANEL (branch PolivoksPanel, 10 Nov 2026), from
+// design/VocalFilter-Polivoks-1-BlackPanel.png - R2Synth's black panel
+// (R2Synth-VSTi/source/R2SynthPanelViews.*, 22 Oct 2026) on this layout:
+// matte black, white printing, each section boxed in a thin white line
+// with its title in its own box, black knurled knobs with printed
+// scales, black keys with a red lamp, the two screens as black glass
+// behind a cut-out, and every word in the 70s sci-fi lettering
+// (SciFiLettering.h), the IPA symbols included. The displays keep their
+// content and the F1 amber / F2 blue / F3 violet code; the formant
+// colours are the only colour on the panel besides the red lamps. Light
+// wear (PanelWear.h): dust, a few hairlines, polished knob tops, dusty
+// glass - the Backdrop draws the panel's, each Knob, VowelPad and
+// Spectrum its own (setWear).
+//
 // VocalFilterControls.* (the SpyBand bar sliders) and
 // VocalFilterDisplay.* (SpyResponseDisplay) are no longer on the panel.
 // They are left in source/ untouched for now so the main branch's panel
@@ -36,6 +50,8 @@
 
 #pragma once
 
+#include "PanelWear.h"
+#include "SciFiLettering.h"
 #include "VocalFilterDsp.h"
 #include "VocalFilterLayout.h"
 
@@ -49,30 +65,43 @@ namespace VocalFilter {
 namespace Panel {
 
 //------------------------------------------------------------------------
-// The palette - R2Synth's tokens
+// The palette - the black panel's tokens (R2Synth's)
 //------------------------------------------------------------------------
 namespace Palette {
 
-const VSTGUI::CColor kGround    ( 20,  21,  24, 255);
-const VSTGUI::CColor kHeader    ( 26,  28,  32, 255);
-const VSTGUI::CColor kBorder    ( 42,  45,  51, 255);
-const VSTGUI::CColor kSection   ( 28,  30,  34, 255);
-const VSTGUI::CColor kRule      ( 36,  38,  43, 255);
-const VSTGUI::CColor kTrack     ( 46,  49,  55, 255);
-const VSTGUI::CColor kCap       ( 42,  44,  49, 255);
-const VSTGUI::CColor kCapEdge   ( 60,  64,  71, 255);
-const VSTGUI::CColor kText      (236, 234, 228, 255);
-const VSTGUI::CColor kTitle     (201, 204, 210, 255);
-const VSTGUI::CColor kMuted     (156, 161, 170, 255);
-const VSTGUI::CColor kSubtle    (126, 131, 140, 255);
-const VSTGUI::CColor kDim       ( 74,  78,  86, 255);
-const VSTGUI::CColor kScreen    ( 15,  16,  18, 255);
-const VSTGUI::CColor kScreenEdge( 38,  41,  46, 255);
-const VSTGUI::CColor kGrid      ( 29,  32,  36, 255);
-const VSTGUI::CColor kSegBack   ( 18,  19,  22, 255);
-const VSTGUI::CColor kLampOn    (255, 138,  61, 255);
-const VSTGUI::CColor kLampOff   ( 58,  42,  32, 255);
-const VSTGUI::CColor kLampEdge  ( 90,  58,  40, 255);
+const VSTGUI::CColor kGround     ( 18,  18,  18, 255);
+const VSTGUI::CColor kHeader     ( 12,  12,  12, 255);
+const VSTGUI::CColor kHeaderRule (233, 230, 220, 255);
+const VSTGUI::CColor kSection    ( 21,  21,  21, 255);
+const VSTGUI::CColor kSectionEdge(217, 214, 204, 255);   // box lines, the switch's frame
+const VSTGUI::CColor kInk        (244, 241, 232, 255);   // the lettering: white on black
+const VSTGUI::CColor kInkSoft    (185, 182, 174, 255);   // subtitles, notes
+const VSTGUI::CColor kInkDim     (143, 140, 133, 255);   // a switch position not set
+const VSTGUI::CColor kLabel      (217, 214, 204, 255);   // the names under the knobs
+const VSTGUI::CColor kDivider    ( 90,  88,  82, 255);
+const VSTGUI::CColor kRule       ( 58,  58,  58, 255);
+const VSTGUI::CColor kTick       (233, 230, 220, 255);   // the printed scales
+const VSTGUI::CColor kRed        (226,  52,  43, 255);   // the bypass window's frame
+const VSTGUI::CColor kScrew      ( 58,  58,  58, 255);
+const VSTGUI::CColor kKnobBody   ( 10,  10,  10, 255);
+const VSTGUI::CColor kKnobRim    ( 47,  47,  47, 255);
+const VSTGUI::CColor kKey        ( 27,  27,  27, 255);   // a vowel key, Manual
+const VSTGUI::CColor kKeyDown    ( 40,  40,  40, 255);
+const VSTGUI::CColor kKeyEdge    ( 74,  74,  74, 255);
+const VSTGUI::CColor kBezel      (  0,   0,   0, 255);   // the cut-out round the glass
+const VSTGUI::CColor kBezelEdge  ( 60,  60,  60, 255);
+const VSTGUI::CColor kScreen     (  8,   9,  11, 255);
+const VSTGUI::CColor kGrid       ( 23,  27,  33, 255);
+const VSTGUI::CColor kScreenText (141, 150, 163, 255);   // captions on the glass
+const VSTGUI::CColor kScreenDim  ( 89,  96, 107, 255);   // the axes' figures
+const VSTGUI::CColor kVowelDisc  ( 18,  19,  22, 255);   // a vowel circle on the chart
+const VSTGUI::CColor kVowelEdge  ( 60,  64,  71, 255);
+const VSTGUI::CColor kLampOn     (255,  59,  47, 255);
+const VSTGUI::CColor kLampOff    ( 58,  21,  18, 255);
+
+/** The names the editor used before the black panel. */
+const VSTGUI::CColor kText   = kInk;
+const VSTGUI::CColor kSubtle = kInkSoft;
 
 /** A role's colour: amber, blue, violet, mint. */
 VSTGUI::CColor accent (Layout::Accent a);
@@ -90,17 +119,23 @@ VSTGUI::CColor withAlpha (VSTGUI::CColor c, uint8_t alpha);
 } // namespace Palette
 
 //------------------------------------------------------------------------
-// The faces. On macOS CoreText falls back to the system face if one is
-// missing, so a name here can never leave text undrawn.
+// The lettering. The panel draws no font text: every word is stroked
+// paths in the 70s sci-fi face.
 //------------------------------------------------------------------------
-VSTGUI::CFontRef fontWordmark ();   // Avenir Next Condensed, bold 23
-VSTGUI::CFontRef fontTitle ();      // Helvetica Neue, bold 13
-VSTGUI::CFontRef fontSubtitle ();   // Helvetica Neue 12
-VSTGUI::CFontRef fontLabel ();      // Helvetica Neue, bold 10 - capitals
-VSTGUI::CFontRef fontValue ();      // Menlo 10 - every reading
-VSTGUI::CFontRef fontNote ();       // Helvetica Neue 11
-VSTGUI::CFontRef fontGlyph ();      // Helvetica Neue, bold 16 - the IPA on a vowel
-VSTGUI::CFontRef fontGlyphSmall (); // Helvetica Neue, bold 15 - the IPA on the chart
+enum class Align
+{
+	Left,
+	Centre,
+	Right
+};
+
+/** DRAW A RUN OF LETTERING: `text` in `style`, its ink box vertically
+    centred on `centreY`, starting at, centred on or ending at `x`.
+    `strokeUnits` > 0 strokes the same glyphs at another weight without
+    moving them - the wordmark's inline cut. (R2Synth's, unchanged.) */
+void drawLettering (VSTGUI::CDrawContext* context, const std::string& text, const Lettering::Style& style,
+                    const VSTGUI::CColor& colour, VSTGUI::CCoord x, VSTGUI::CCoord centreY,
+                    Align align = Align::Left, double strokeUnits = -1.0);
 
 /** A string in capitals - labels are stored as words and drawn as small
     capitals. ASCII only, which is all the labels are. */
@@ -118,11 +153,19 @@ public:
 	explicit Backdrop (const VSTGUI::CRect& size);
 	void draw (VSTGUI::CDrawContext* context) override;
 	CLASS_METHODS (Backdrop, VSTGUI::CView)
+
+private:
+	/** The wear on the panel - over the printing, under the controls.
+	    Only the marks that touch the area being redrawn are drawn, so a
+	    knob turning does not redraw a thousand specks. */
+	void drawWear (VSTGUI::CDrawContext* context);
+
+	Wear::PanelWear mWear;
 };
 
 //------------------------------------------------------------------------
-/** A ROTARY KNOB - R2Synth's, unchanged. The arc runs 270 degrees; the
-    value arc is drawn over a dark track in the role's colour.
+/** A ROTARY KNOB - R2Synth's black-panel knob: black, knurled, a white
+    line, a printed scale of eleven ticks over 270 degrees.
 
     THE WHOLE RECTANGLE IS THE TARGET, reading and label included.
 
@@ -142,6 +185,10 @@ public:
 	    the parameter table's own formatting. */
 	void setFormatter (std::function<std::string (float)> formatter) { mFormatter = std::move (formatter); }
 
+	/** Its wear (Wear::knobWear) - drawn relative to the pointer, so it
+	    turns with the knob. None until set. */
+	void setWear (const Wear::KnobWear& wear) { mWear = wear; }
+
 	void draw (VSTGUI::CDrawContext* context) override;
 
 	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
@@ -157,19 +204,23 @@ public:
 	static double angleOf (double normalized) { return 135.0 + 270.0 * normalized; }
 
 private:
+	/** Its formant. Every knob on the black panel is black and white;
+	    kept so a knob still knows. */
 	Layout::Accent mAccent;
 	int  mDiameter;
 	bool mBipolar;
 	std::string mLabel;
 	std::function<std::string (float)> mFormatter;
+	Wear::KnobWear mWear;
 
 	bool mDragging = false;
 	VSTGUI::CCoord mLastY = 0.;
 };
 
 //------------------------------------------------------------------------
-/** A SEGMENTED SWITCH - R2Synth's, unchanged. One segment per named
-    position, the current one lit; a click selects, the wheel steps. */
+/** A SEGMENTED SWITCH - the Voice switch: a white-framed black slot, one
+    segment per named position, the current one printed white with black
+    lettering; a click selects, the wheel steps. */
 class SegmentSwitch : public VSTGUI::CControl
 {
 public:
@@ -253,6 +304,10 @@ public:
 	/** Returns true if anything that is drawn changed. */
 	bool setState (const State& state);
 
+	/** The dust and the fingerprint on its glass (Wear::glassWear (0)),
+	    drawn over everything. */
+	void setWear (const Wear::GlassWear& wear) { mWear = wear; }
+
 	void draw (VSTGUI::CDrawContext* context) override;
 
 	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
@@ -272,6 +327,7 @@ private:
 
 	IVowelPadListener* mListener;
 	State mState;
+	Wear::GlassWear mWear;
 
 	enum class Press { None, OnVowel, Dragging };
 	Press mPress = Press::None;
@@ -301,6 +357,9 @@ public:
 	void setCaption (const std::string& caption);
 	void setAnnotation (const std::string& annotation);
 
+	/** The dust and the fingerprint on its glass (Wear::glassWear (1)). */
+	void setWear (const Wear::GlassWear& wear) { mWear = wear; }
+
 	void draw (VSTGUI::CDrawContext* context) override;
 
 	CLASS_METHODS (Spectrum, VSTGUI::CView)
@@ -317,11 +376,13 @@ private:
 	double mSampleRate = 44100.0;
 	std::string mCaption;
 	std::string mAnnotation;
+	Wear::GlassWear mWear;
 };
 
 //------------------------------------------------------------------------
-/** ONE VOWEL PRESET: the IPA symbol large, the button's name under it.
-    Lit in amber while that vowel is selected - by this panel or by host
+/** ONE VOWEL PRESET: a black key, the IPA symbol large, the button's
+    name under it, a lamp in its corner. Lamp lit while that vowel is
+    selected - by this panel or by host
     automation, so it is an indicator as well as a button. Fires on mouse
     UP, and only if the pointer is still inside. Carries no parameter: the
     handler writes the Vowel selector. */
@@ -351,7 +412,7 @@ private:
 };
 
 //------------------------------------------------------------------------
-/** MANUAL: a lamp, the word, and a hint. Lit while the Vowel selector is
+/** MANUAL: a black key with a lamp, the word, and a hint. Lit while the Vowel selector is
     on Manual. A click leaves the presets WITHOUT the sound jumping - the
     editor copies the live vowel into the nine parameters first. */
 class ManualButton : public VSTGUI::CView
@@ -400,8 +461,8 @@ private:
 };
 
 //------------------------------------------------------------------------
-/** BYPASS, as a pill in the header: a lamp and the word. A click toggles
-    the host's bypass parameter. */
+/** BYPASS, as a red-framed window in the header: a lamp and the words.
+    A click toggles the host's bypass parameter. */
 class BypassPill : public VSTGUI::CControl
 {
 public:
@@ -412,6 +473,25 @@ public:
 	void onMouseUpEvent (VSTGUI::MouseUpEvent& event) override;
 
 	CLASS_METHODS (BypassPill, VSTGUI::CControl)
+};
+
+//------------------------------------------------------------------------
+/** ONE LINE OF LETTERING whose words change - the engine line in the
+    header. Left-aligned, vertically centred in the view.
+    Mouse-disabled. */
+class TextLine : public VSTGUI::CView
+{
+public:
+	TextLine (const VSTGUI::CRect& size, const Lettering::Style& style, const VSTGUI::CColor& colour);
+	void setText (const std::string& text);
+	const std::string& getText () const { return mText; }
+	void draw (VSTGUI::CDrawContext* context) override;
+	CLASS_METHODS (TextLine, VSTGUI::CView)
+
+private:
+	Lettering::Style mStyle;
+	VSTGUI::CColor mColour;
+	std::string mText;
 };
 
 //------------------------------------------------------------------------

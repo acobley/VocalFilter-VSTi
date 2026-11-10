@@ -9,8 +9,16 @@
 //     c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk tests/LayoutTests.cpp
 //         source/VocalFilterParams.cpp source/VocalFilterDsp.cpp
 //         -o /tmp/layouttests && /tmp/layouttests
+//
+// THE BLACK PANEL (10 Nov 2026): every fit is measured with
+// Lettering::width() - the width of the strokes the views draw - instead
+// of average character widths; the face itself is tested (every glyph
+// parses and stays near its grid, every character the panel prints has a
+// glyph, the IPA symbols keep their case); and the wear (PanelWear.h) is
+// held to the panel, off the glass, and faint.
 //------------------------------------------------------------------------
 
+#include "PanelWear.h"
 #include "VocalFilterLayout.h"
 
 #include <cmath>
@@ -64,21 +72,49 @@ struct Placed
 };
 
 /** The widest reading a knob can show, in characters. */
-int widestReading (ParamID tag)
+/** The widest reading a knob can show, in pixels of lettering: the
+    editor's readout() over the whole range, 401 steps and the ends. */
+double widestReading (ParamID tag, std::string* which = nullptr)
 {
 	const ParamDef& def = paramDef (tag);
 	const std::string units = def.units ? def.units : "";
-	int widest = 0;
-	for (double plain : { def.plainMin, def.plainMax, def.plainDefault })
+	double widest = 0.0;
+	for (int i = 0; i <= 401; ++i)
 	{
+		const double plain = (i == 401) ? def.plainDefault : def.toPlain (i / 400.0);
 		char buffer[32];
 		if (units == "dB")
 			std::snprintf (buffer, sizeof (buffer), "%.1f dB", plain);
+		else if (units.empty ())
+			std::snprintf (buffer, sizeof (buffer), "%.0f", plain);
 		else
 			std::snprintf (buffer, sizeof (buffer), "%.0f %s", plain, units.c_str ());
-		widest = std::max (widest, static_cast<int> (std::strlen (buffer)));
+		const double w = Lettering::width (buffer, kTextValue);
+		if (w > widest)
+		{
+			widest = w;
+			if (which)
+				*which = buffer;
+		}
 	}
 	return widest;
+}
+
+/** Every character of `text` has a glyph of its own - none drawn as the
+    dot. */
+bool allDrawn (const std::string& text, bool keepCase = false)
+{
+	for (uint32_t c : Lettering::codePoints (text, keepCase))
+		if (c != ' ' && !Lettering::glyphFor (c))
+			return false;
+	return true;
+}
+
+std::string px (double v)
+{
+	char t[16];
+	std::snprintf (t, sizeof (t), "%.1f", v);
+	return t;
 }
 
 } // namespace
@@ -160,29 +196,87 @@ int main ()
 		check (contains ({ 0, 0, kEditorWidth, kHeaderHeight }, kEngineLine), "the engine line is in the header");
 		check (!overlaps (kEngineLine, kBypassPill), "the engine line stops before the bypass pill");
 		check (!overlaps (kEngineLine, kWordmark), "the engine line starts after the wordmark");
+		const double wordmark = Lettering::width ("VOCAL", kTextWordmark) + kWordmarkGap +
+		                        Lettering::width ("FILTER", kTextWordmark);
+		check (kWordmark.left + wordmark <= kWordmark.right,
+		       "the wordmark (" + px (wordmark) + " px) fits its box");
+		check (kTextWordmark.height () <= kHeaderHeight - 16, "the wordmark clears the header's edges");
 	}
 
 	//--------------------------------------------------------------------
-	section ("3. Every reading and label fits its knob");
+	section ("3. Every reading, label and caption fits, in the lettering");
 	//--------------------------------------------------------------------
 	{
 		for (const auto& c : kControls)
 		{
 			if (c.kind != Kind::Knob)
 				continue;
-			// Knob::draw lets the text run 4 pixels past each side.
-			const int room = c.width + 8;
-			check (widestReading (c.tag) * kValueCharWidth <= room,
-			       std::string (nameOf (c.tag)) + ": widest reading fits");
-			check (static_cast<int> (std::strlen (c.label)) * kLabelCharWidth <= room,
-			       std::string (nameOf (c.tag)) + ": label fits");
+			// Centred under the knob; 2 px either side may run past the
+			// rectangle - the knobs beside it are further off than that.
+			const double room = c.width + 4.0;
+			std::string which;
+			const double w = widestReading (c.tag, &which);
+			check (w <= room, std::string (nameOf (c.tag)) + ": widest reading \"" + which + "\" (" + px (w) +
+			                      " px) fits " + px (room));
+			const double lw = Lettering::width (c.label, kTextLabel);
+			check (lw <= room, std::string (nameOf (c.tag)) + ": label (" + px (lw) + " px) fits");
 		}
 		for (int i = 0; i < kNumCaptions; ++i)
 		{
 			const auto& cap = kCaptions[i];
-			if (cap.style == CaptionStyle::Note)
-				check (static_cast<int> (std::strlen (cap.text)) * kNoteCharWidth <= cap.r.width () + 12,
-				       std::string ("\"") + cap.text + "\" fits its line");
+			const auto& st = (cap.style == CaptionStyle::Note) ? kTextNote : kTextBlock;
+			const double w = Lettering::width (cap.text, st);
+			check (w <= cap.r.width (), std::string ("\"") + cap.text + "\" (" + px (w) + " px) fits its line");
+			check (st.height () <= cap.r.height () + 2, std::string ("\"") + cap.text + "\" fits its line's height");
+		}
+
+		// ---- the section titles and subtitles ------------------------------
+		for (const auto& sec : kSections)
+		{
+			const Box b = titleBox (sec);
+			check (b.top >= sec.r.top + 4 && b.left >= sec.r.left + 8,
+			       std::string (sec.title) + ": title box inside its section");
+			double right = sec.r.right - kSectionPadX;
+			for (const auto& c : kControls)
+				if (c.kind == Kind::Switch && c.y < sec.r.top + 40 && c.x > sec.r.left && c.x < sec.r.right)
+					right = std::min<double> (right, c.x - 8);
+			const double end = (sec.subtitle && *sec.subtitle)
+			                       ? subtitleLeft (sec) + Lettering::width (sec.subtitle, kTextSubtitle)
+			                       : b.right;
+			check (end <= right, std::string (sec.title) + ": title and subtitle end at " + px (end) +
+			                         ", before " + px (right));
+		}
+		check (titleBox (kSections[1]).bottom <= kSpectrumView.top,
+		       "the spectrum's title box stops above its glass");
+		check (titleBox (kSections[0]).bottom <= kPadView.top, "the vowel space's title box stops above the chart");
+
+		// ---- the header ------------------------------------------------------
+		// The longest engine line the editor writes: the fastest rate, a
+		// glide to the longest name at the longest time.
+		const std::string engine = "Engine: 384000 Hz  \xC2\xB7  gliding to Uuuu  \xC2\xB7  2000 of 2000 ms";
+		const double ew = Lettering::width (engine, kTextEngine);
+		check (ew <= kEngineLine.width (), "the longest engine line (" + px (ew) + " px) fits");
+		check (allDrawn (engine), "the engine line has a glyph for every character");
+		const double bw = 32.0 + Lettering::width ("BYPASS  OFF", kTextPill);
+		check (bw <= kBypassPill.width () - 8, "BYPASS OFF fits its window");
+
+		// ---- the keys ----------------------------------------------------------
+		for (int v = 0; v < kVowelCount; ++v)
+		{
+			const Rect r = vowelButtonRect (v);
+			const char* name = vowelSelectionName (v + 1);
+			check (Lettering::width (name, kTextLabel) <= r.width () - 6, std::string (name) + ": name fits its key");
+			check (Lettering::width (kVowelIpa[v], kTextIpaKey) <= r.width () - 20,
+			       std::string (name) + ": symbol fits its key, clear of the lamp");
+		}
+		const double manual = 32.0 + Lettering::width ("MANUAL", kTextPill) + 16.0 +
+		                      Lettering::width (kManualHint, kTextHint) + 12.0;
+		check (manual <= kManualButton.width (), "MANUAL and its hint fit the key (" + px (manual) + " px)");
+		for (int i = 0; i < kVoiceCount; ++i)
+		{
+			const Control& sw = kControls[0];
+			check (Lettering::width (voiceName (i), kTextPill) <= (sw.width - 4) / 2.0 - 8,
+			       std::string (voiceName (i)) + " fits its half of the Voice switch");
 		}
 	}
 
@@ -238,6 +332,139 @@ int main ()
 			               voiceName (voice), closest, 2 * kVowelCircleRadius + 2);
 			check (closest >= 2 * kVowelCircleRadius + 2, what);
 		}
+	}
+
+	//--------------------------------------------------------------------
+	section ("5. The 70s sci-fi lettering");
+	//--------------------------------------------------------------------
+	{
+		int parsed = 0, total = 0, onGrid = 0;
+		for (uint32_t c = 1; c < 0x2600; ++c)
+		{
+			const Lettering::Glyph* g = Lettering::glyphFor (c);
+			if (!g)
+				continue;
+			++total;
+			const auto cmds = Lettering::parse (g->path);
+			if (!cmds.empty ())
+				++parsed;
+			bool inside = true;
+			for (const auto& k : cmds)
+				for (double x : { k.x, k.x1 })
+					inside = inside && x >= -0.5 && x <= g->advance + 0.5;
+			for (const auto& k : cmds)
+				for (double y : { k.y, k.y1 })
+					inside = inside && y >= -0.5 && y <= 7.1;
+			if (inside)
+				++onGrid;
+		}
+		check (parsed == total, "every glyph parses (" + std::to_string (parsed) + " of " + std::to_string (total) + ")");
+		check (onGrid == total, "every glyph stays on its grid");
+		bool az = true;
+		for (char c = 'A'; c <= 'Z'; ++c)
+			az = az && Lettering::glyphFor (static_cast<uint32_t> (c));
+		for (char c = '0'; c <= '9'; ++c)
+			az = az && Lettering::glyphFor (static_cast<uint32_t> (c));
+		check (az, "A-Z and 0-9 are all there");
+
+		// The IPA keeps its case; /i/ and /I/ are different glyphs.
+		for (int v = 0; v < kVowelCount; ++v)
+			check (allDrawn (kVowelIpa[v], true), std::string ("the IPA for ") + vowelSelectionName (v + 1) + " is drawn");
+		const auto i = Lettering::codePoints ("i", true), ii = Lettering::codePoints ("\xC9\xAA", true);
+		check (i.size () == 1 && ii.size () == 1 && i[0] != ii[0] &&
+		       std::string (Lettering::glyphFor (i[0])->path) != Lettering::glyphFor (ii[0])->path,
+		       "/i/ and /I/ are drawn differently");
+		check (Lettering::codePoints ("i")[0] == 'I', "lower case is still drawn in capitals elsewhere");
+
+		// Every fixed word on the panel has its glyphs.
+		bool all = true;
+		std::string missing;
+		auto need = [&] (const std::string& t) { if (!allDrawn (t)) { all = false; missing = t; } };
+		for (const auto& sec : kSections) { need (sec.title); need (sec.subtitle); }
+		for (const auto& c : kCaptions) need (c.text);
+		for (const auto& c : kControls) need (c.label);
+		for (int v = 0; v <= kVowelCount; ++v) need (vowelSelectionName (v));
+		need (kManualHint);
+		need ("F1 \xE2\x86\x93 close \xE2\x80\xA6 open");
+		need ("\xE2\x86\x90 F2 front \xE2\x80\xA6 back");
+		need ("\xE2\x97\x8B female means");
+		need ("targets  \xC2\xB7  no live values from the host");
+		need ("live  \xC2\xB7  mid-glide");
+		check (all, "every fixed word has a glyph for every character" + (all ? std::string () : " - not \"" + missing + "\""));
+	}
+
+	//--------------------------------------------------------------------
+	section ("6. The wear - mild, on the panel, off the glass");
+	//--------------------------------------------------------------------
+	{
+		const Wear::PanelWear a = Wear::panelWear (), b = Wear::panelWear ();
+		check (a.specks.size () == b.specks.size () && a.scratches.size () == b.scratches.size () &&
+		       !a.specks.empty () && a.specks.back ().x == b.specks.back ().x,
+		       "the same marks every time (" + std::to_string (a.specks.size ()) + " specks, " +
+		       std::to_string (a.scratches.size ()) + " scratches)");
+
+		bool inPanel = true, offGlass = true, faint = true;
+		auto onGlass = [] (double x, double y, double pad) {
+			for (const auto& g : Wear::Detail::kGlass)
+				if (Wear::Detail::inRect (g, x, y, pad))
+					return true;
+			return false;
+		};
+		for (const auto& sp : a.specks)
+		{
+			inPanel = inPanel && sp.x > 0 && sp.y > 0 && sp.x < kEditorWidth && sp.y < kEditorHeight;
+			offGlass = offGlass && !onGlass (sp.x, sp.y, 0.5);
+			faint = faint && sp.alpha <= Wear::kMaxMarkAlpha;
+		}
+		for (const auto* set : { &a.scratches, &a.fibres })
+			for (const auto& l : *set)
+			{
+				faint = faint && l.alpha <= Wear::kMaxMarkAlpha && l.width <= 1.4;
+				for (const auto& p : l.pts)
+				{
+					inPanel = inPanel && p.x > 0 && p.y > 0 && p.x < kEditorWidth && p.y < kEditorHeight;
+					offGlass = offGlass && !onGlass (p.x, p.y, 1.0);
+				}
+			}
+		for (const auto& h : a.haze)
+			faint = faint && h.alpha <= Wear::kMaxHazeAlpha;
+		check (inPanel, "every panel mark is on the panel");
+		check (offGlass, "no panel mark on either screen's glass");
+		check (faint, "every panel mark is faint");
+
+		bool glassOk = true, printsFaint = true;
+		for (int i = 0; i < Wear::Detail::kNumGlass; ++i)
+		{
+			const Rect g = Wear::Detail::kGlass[i];
+			const Wear::GlassWear w = Wear::glassWear (i);
+			for (const auto& d : w.dust)
+				glassOk = glassOk && Wear::Detail::inRect (g, d.x, d.y);
+			for (const auto& p : w.prints)
+				for (const auto& r : p.ridges)
+				{
+					printsFaint = printsFaint && r.alpha <= Wear::kMaxPrintAlpha;
+					for (const auto& q : r.pts)
+						glassOk = glassOk && Wear::Detail::inRect (g, q.x, q.y);
+				}
+			check (w.prints.size () == 1, std::string (i ? "the spectrum" : "the vowel chart") + " has one fingerprint");
+		}
+		check (glassOk, "every glass mark is on its own screen");
+		check (printsFaint, "the fingerprints are faint");
+
+		bool knobsOk = true;
+		for (int i = 0; i < kNumControls; ++i)
+		{
+			if (kControls[i].kind != Kind::Knob)
+				continue;
+			const Wear::KnobWear k = Wear::knobWear (i);
+			for (const auto& s : k.scuffs)
+				knobsOk = knobsOk && s.radius > 0 && s.radius < 1 && s.alpha <= Wear::kMaxMarkAlpha;
+			for (const auto& g : k.grit)
+				knobsOk = knobsOk && g.radius > 0 && g.radius < 1;
+			knobsOk = knobsOk && k.sheen <= Wear::kMaxHazeAlpha;
+		}
+		check (knobsOk, "every knob mark is on its cap or knurling, and faint");
+		check (Wear::controlIndex (kGlide) >= 0 && Wear::controlIndex (999999) == -1, "controlIndex finds knobs");
 	}
 
 	std::printf ("\n%s - %d failure(s)\n", gFailures == 0 ? "PASS" : "FAIL", gFailures);

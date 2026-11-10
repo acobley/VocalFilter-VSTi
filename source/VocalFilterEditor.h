@@ -117,9 +117,6 @@ private:
 	/** Build one table entry: a knob or a switch, bound to its parameter. */
 	void addControl (const Layout::Control& c);
 
-	/** A line of text that changes - the engine line. */
-	VSTGUI::CTextLabel* addTextLine (const Layout::Rect& r, VSTGUI::CFontRef font,
-	                                 const VSTGUI::CColor& colour);
 
 	VocalFilterController* mController = nullptr;
 
@@ -129,7 +126,7 @@ private:
 	Panel::VowelPad* mPad = nullptr;
 	Panel::Spectrum* mSpectrum = nullptr;
 	Panel::GlideMeter* mGlideMeter = nullptr;
-	VSTGUI::CTextLabel* mEngineLine = nullptr;
+	Panel::TextLine* mEngineLine = nullptr;
 
 	VSTGUI::SharedPointer<VSTGUI::CVSTGUITimer> mTimer;
 

@@ -104,7 +104,10 @@ sounds far less dramatic.
 
 ### The panel
 
-Four sections, in R2Synth's style (design: `design/VocalFilter-Concept3b-VowelSpace.png`).
+Four sections, in R2Synth's style (layout: `design/VocalFilter-Concept3b-VowelSpace.png`),
+dressed as R2Synth's black panel (`design/VocalFilter-Polivoks-1-BlackPanel.png`):
+matte black, white printing, knurled knobs, black keys with red lamps, and
+every word in the 70s sci-fi lettering, with light wear.
 
 * **Vowel space** — a vowel chart you can play. F2 runs across (falling to
   the right) and F1 down (falling downward), the way phoneticians plot

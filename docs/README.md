@@ -75,8 +75,11 @@ python3 tools/render-panel.py docs/panel-female.png 4 1 # Oooo, female voice
 
 It needs a C++ compiler, Pillow, and the SDK's headers in `external/vst3sdk`.
 What it cannot show: the glide (it draws the panel at rest), hover and press
-states, and the exact faces — on a Mac it uses Helvetica Neue and Menlo as the
-plug-in does, elsewhere DejaVu, which is wider.
+states, and VSTGUI's own anti-aliasing. Since the black panel (10 Nov 2026)
+it needs no fonts: the lettering is stroked from the glyphs `dump-layout`
+prints from `source/SciFiLettering.h`, and the wear is the marks it prints
+from `source/PanelWear.h`, so the picture and the plug-in draw the same
+strokes and the same dust.
 
 The layout is also held to its rules by `tests/LayoutTests.cpp` (run by
 `tools/run-tests.sh`): every parameter with a control appears once, nothing

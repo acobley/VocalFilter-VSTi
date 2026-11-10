@@ -37,10 +37,20 @@
 // the view, so the tests can hold them to that.
 //
 // The panel is 1200 x 640, R2Synth's size.
+//
+// THE BLACK PANEL (branch PolivoksPanel, 10 Nov 2026), from
+// design/VocalFilter-Polivoks-1-BlackPanel.png: R2Synth's black panel
+// redress (matte black, white printing, boxed sections, knurled knobs,
+// every word in the 70s sci-fi lettering, light wear) on THIS layout. The
+// only moves: the wordmark is wider, so the header divider and the engine
+// line shift right; four notes are shortened to fit the wider face. The
+// lettering's sizes (kText*) and the boxes the title and subtitle land
+// in are here, so the tests measure the same runs the views draw.
 //------------------------------------------------------------------------
 
 #pragma once
 
+#include "SciFiLettering.h"
 #include "VocalFilterDsp.h"
 #include "VocalFilterParams.h"
 
@@ -59,6 +69,14 @@ struct Rect
 	constexpr int height () const { return bottom - top; }
 };
 
+/** The same in fractional pixels - where a run of lettering lands. */
+struct Box
+{
+	double left, top, right, bottom;
+};
+
+struct Point { int x, y; };
+
 //------------------------------------------------------------------------
 // The panel
 //------------------------------------------------------------------------
@@ -72,7 +90,7 @@ constexpr int kHeaderHeight = 56;
 constexpr int kSectionPadX     = 14;
 constexpr int kSectionPadTop   = 12;
 constexpr int kSectionTitleH   = 18;
-constexpr int kSectionRadius   = 10;
+constexpr int kSectionRadius   = 3;
 
 /** Under every knob: two pixels, the reading, the label. */
 constexpr int kKnobGap       = 2;
@@ -83,11 +101,25 @@ constexpr int kKnobTextBand  = kKnobGap + kKnobValueH + kKnobLabelH;
 /** A segmented switch that sits in a section's title row. */
 constexpr int kTitleSwitchHeight = 24;
 
-/** CHARACTER WIDTHS for the fit tests - generous averages for Menlo 10
-    (readings) and Helvetica Neue bold 10 in capitals (labels). */
-constexpr int kValueCharWidth = 6;
-constexpr int kLabelCharWidth = 7;
-constexpr int kNoteCharWidth  = 6;
+//------------------------------------------------------------------------
+// The lettering - SciFiLettering.h's face at the panel's sizes. Cap
+// heights are 0.64 of the font sizes the design was drawn with, so the
+// tests measure exactly what is drawn (Lettering::width).
+//------------------------------------------------------------------------
+constexpr Lettering::Style kTextWordmark { 22.0, 1.7, 1.2 };
+constexpr Lettering::Style kTextTitle    { 8.3, Lettering::kBold };     // a section's name
+constexpr Lettering::Style kTextSubtitle { 6.1, Lettering::kRegular };
+constexpr Lettering::Style kTextBlock    { 8.3, Lettering::kBold };     // F1 / F2 / F3
+constexpr Lettering::Style kTextNote     { 6.4, Lettering::kRegular };
+constexpr Lettering::Style kTextLabel    { 6.1, Lettering::kBold };     // knob names, vowel names
+constexpr Lettering::Style kTextValue    { 6.1, Lettering::kRegular };  // every reading
+constexpr Lettering::Style kTextEngine   { 6.7, Lettering::kRegular };
+constexpr Lettering::Style kTextPill     { 6.7, Lettering::kBold };     // BYPASS, MANUAL, Male / Female
+constexpr Lettering::Style kTextHint     { 5.8, Lettering::kRegular };  // the Manual button's hint
+constexpr Lettering::Style kTextScreen   { 6.1, Lettering::kRegular };  // captions on the glass
+constexpr Lettering::Style kTextScale    { 5.8, Lettering::kRegular };  // the axes' figures
+constexpr Lettering::Style kTextIpaKey   { 10.2, Lettering::kBold, 1.05, true };   // a vowel button's symbol
+constexpr Lettering::Style kTextIpaChart { 9.6, Lettering::kBold, 1.05, true };    // a vowel circle's symbol
 
 //------------------------------------------------------------------------
 // Colours, by role. One per formant, carried through the knobs, the
@@ -126,10 +158,30 @@ constexpr Rect kOutputRect   { 592, 528, 1184, 624 };
 constexpr Section kSections[] = {
 	{ "VOWEL SPACE", "drag to blend between vowels",                       Accent::Amber,  kVowelRect    },
 	{ "SPECTRUM",    "the filter as it sounds now",                        Accent::Blue,   kSpectrumRect },
-	{ "FORMANTS",    "width, level, and F3, which the pad does not reach", Accent::Violet, kFormantRect  },
+	{ "FORMANTS",    "width, level, and F3 - off the pad",                 Accent::Violet, kFormantRect  },
 	{ "OUTPUT",      "",                                                   Accent::Mint,   kOutputRect   },
 };
 constexpr int kNumSections = static_cast<int> (sizeof (kSections) / sizeof (kSections[0]));
+
+constexpr double titleRowCentre (const Rect& section)
+{
+	return section.top + kSectionPadTop + kSectionTitleH / 2.0 - 0.5;
+}
+
+/** THE TITLE BOX: the section's name in a white-outlined box at the left
+    of its title row, 9 px of black each side of the lettering. */
+inline Box titleBox (const Section& s)
+{
+	const double left = s.r.left + kSectionPadX;
+	const double centre = titleRowCentre (s.r);
+	return { left, centre - 10.5, left + 18.0 + Lettering::width (s.title, kTextTitle), centre + 10.5 };
+}
+
+/** Where the subtitle starts: 12 px after the title box. */
+inline double subtitleLeft (const Section& s)
+{
+	return titleBox (s).right + 12.0;
+}
 
 //------------------------------------------------------------------------
 // Controls - every parameter that has a knob or a switch
@@ -242,9 +294,20 @@ constexpr double kSpectrumFloorDb = -66.0;
 //------------------------------------------------------------------------
 // The header
 //------------------------------------------------------------------------
-constexpr Rect kWordmark   { 24,  0,   236, kHeaderHeight };
-constexpr Rect kEngineLine { 252, 20,  1020, 36 };
-constexpr Rect kBypassPill { 1056, 14, 1184, 42 };
+/** VOCAL FILTER in the heavy face, with the inline cut. Wider than the
+    old wordmark, so the divider and the engine line moved right. */
+constexpr Rect kWordmark      { 24,  0,   292, kHeaderHeight };
+constexpr int  kWordmarkGap   = 12;     // between VOCAL and FILTER
+constexpr int  kHeaderDivider = 306;
+constexpr Rect kEngineLine    { 320, 20,  1020, 36 };
+constexpr Rect kBypassPill    { 1056, 14, 1184, 42 };
+
+/** The four corner screws. */
+constexpr Point kScrews[] = { { 8, 8 }, { kEditorWidth - 8, 8 }, { 8, kEditorHeight - 8 },
+                              { kEditorWidth - 8, kEditorHeight - 8 } };
+
+/** The Manual button's hint, beside the word. */
+constexpr const char* kManualHint = "drag the chart to leave presets";
 
 //------------------------------------------------------------------------
 // Fixed lettering and rules
@@ -272,9 +335,9 @@ constexpr Caption kCaptions[] = {
 	{ "knob only", CaptionStyle::Note, Accent::Violet, { formantCol (2) + 28, 390, formantCol (2) + 176, 404 } },
 
 	{ "stereo, one model", CaptionStyle::Note, Accent::Mint, { 606, 578, 770, 592 } },
-	{ "Dry/Wet and Trim ease in over", CaptionStyle::Note, Accent::Mint, { 978, 556, 1170, 570 } },
-	{ "about 10 ms; the nine formant",  CaptionStyle::Note, Accent::Mint, { 978, 572, 1170, 586 } },
-	{ "values follow the Glide.",       CaptionStyle::Note, Accent::Mint, { 978, 588, 1170, 602 } },
+	{ "Mix + Trim ease in",             CaptionStyle::Note, Accent::Mint, { 978, 556, 1170, 570 } },
+	{ "over 10 ms; formants",           CaptionStyle::Note, Accent::Mint, { 978, 572, 1170, 586 } },
+	{ "follow the Glide",               CaptionStyle::Note, Accent::Mint, { 978, 588, 1170, 602 } },
 };
 constexpr int kNumCaptions = static_cast<int> (sizeof (kCaptions) / sizeof (kCaptions[0]));
 
@@ -350,6 +413,8 @@ static_assert (kOutputRect.bottom + kMargin == kEditorHeight, "the output sectio
 static_assert (kSpectrumRect.right + kMargin == kEditorWidth, "the right column ends a margin from the right");
 static_assert (vowelButtonRect (kVowelCount - 1).right <= kRules[0].left - 8,
                "the five vowel buttons stop short of the rule before the glide");
+static_assert (kWordmark.right < kHeaderDivider && kHeaderDivider < kEngineLine.left,
+               "the divider sits between the wordmark and the engine line");
 static_assert (kEditorWidth == 1200 && kEditorHeight == 640,
                "the panel changed size - update the banner, docs/panel.png and this assert together");
 
