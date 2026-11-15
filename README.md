@@ -17,10 +17,13 @@ against the dry signal and trimmed:
 
 ```
 in --+--> BP(F1) * A1 --+
-     +--> BP(F2) * -A2 -+--> wet --+--> mix --> trim --> out
+     +--> BP(F2) * -A2 -+--> wet --+--> mix --> comp --> trim --> out
      +--> BP(F3) * A3 --+          |
      +--------- dry ---------------+
 ```
+
+`comp` is **Level Comp**, an optional make-up gain (off by default) — see
+Controls.
 
 Parallel rather than cascaded because a parallel bank lets each formant carry
 its own amplitude, which is the point of dialling a vowel by hand. F2 is
@@ -29,7 +32,8 @@ and dig a null a real tract does not have.
 
 [`docs/signal-path.png`](docs/signal-path.png) draws the whole thing —
 including how the voice switch, the vowel selector and the glide reach the
-filters, and how the display gets the values it draws.
+filters, where the Level Comp gain is worked out and applied, and how the
+displays and its reading get the values they show.
 
 The filters are RBJ constant-0 dB-peak bandpasses, so a formant's Level is its
 level and the Width control is not secretly a second gain.
@@ -194,13 +198,14 @@ c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
     -o /tmp/paramstests && /tmp/paramstests
 ```
 
-Each prints its own total — 63 and 25 at the last count. They measure rather
+At 1.3.0.0 they make 87, 37 and 203 assertions. They measure rather
 than assume: where the formant peaks actually land, that the running filter
 matches the curve the display draws, that the −3 dB width is the width that
 was asked for, that the response is unchanged from 44.1 k to 192 k, that every
 glide setting lands on the right sample, and that the fastest legal glide is
 far quieter at 6–12 kHz than an instant jump — asserted at 30 dB, measured at
-36.
+36 — and that with Level Comp on, pink noise through every vowel comes out
+within half an LU of its input loudness.
 
 The parameter suite covers what the DSP one structurally cannot see: that
 every id is classified exactly once, that a setting is not mistaken for one of

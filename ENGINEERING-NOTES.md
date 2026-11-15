@@ -22,9 +22,9 @@ summed, mixed against the dry signal and trimmed.
 | Buses | **Stereo in, stereo out, and nothing else** | `setBusArrangements` refuses every other layout and `resource/au-info.plist` lists only `2/2` to match — auval is strict about the two agreeing |
 | Sample formats | 32- and 64-bit accepted | the line is float, as these plug-ins were; a 64-bit host is converted through `mScratchIn/Out` rather than refused |
 | Filter topology | **parallel**, not cascaded | a parallel bank lets each formant carry its own amplitude, which is the whole point of setting a vowel by hand. A cascade derives the relative levels from the pole positions and gives you no say in them |
-| Parameters | fourteen settings, plus nine read-only hidden values the processor publishes for the display | sections 2 and 4b |
+| Parameters | fifteen settings (Level Comp the newest, 1.3.0.0), plus ten read-only hidden values the processor publishes: the nine the displays read and the Level Comp gain | sections 2, 4b and DEVIATION 5 |
 | Editor | **Yes** | a silent processor-and-controller shell was got validating first, while there was little code to search; the panel came afterwards |
-| Custom controls | `SpySlider`, `SpyToggle`, `SpySelector`, lifted from SpyBand, plus `SpyPresetButton` | section 4 |
+| Custom controls | R2Synth's black-panel set in `VocalFilterPanelViews.*`: `Knob`, `SegmentSwitch` (Voice), `RotarySwitch` (Level Comp), the vowel keys, the vowel chart and the spectrum. The SpyBand-derived `VocalFilterControls.*` are still in `source/`, unused | section 4 |
 | Vowel presets | five — A E I O U — in **two voices**, reached from the panel or from host-automatable **Vowel** and **Voice** parameters | sections 2, 2c and 2d |
 | Vowel transitions | a timed **linear ramp**, one length for all nine, so they arrive together | section 2b |
 
@@ -33,7 +33,7 @@ summed, mixed against the dry signal and trimmed.
           |                      |
           +--> BP(F2, B2) * A2 --+--> wet --+
           |                      |          |
-          +--> BP(F3, B3) * A3 --+          +--> mix --> trim --> out
+          +--> BP(F3, B3) * A3 --+          +--> mix --> comp --> trim --> out
           |                                 |
           +--------- dry -------------------+
 ```
@@ -1312,7 +1312,7 @@ done
 nm -C /tmp/*.o | grep " U " | grep VocalFilter::   # must all be defined elsewhere
 ```
 
-Seven translation units, **zero errors and zero warnings in our own sources**,
+Nine translation units, **zero errors and zero warnings in our own sources**,
 every undefined `VocalFilter::` symbol defined in another object.
 
 `-DRELEASE=1` is required or `fdebug.h` refuses to compile. Compile to an
@@ -1322,8 +1322,9 @@ defined, and syntax-only will not catch it. Do not pipe the compiler into
 `head` — the closed pipe kills it with SIGPIPE and you get a missing object
 file and no error message.
 
-**Two** suites, and the split matters — see the BUG entry in section 2. The
-DSP suite is SDK-free and therefore cannot see the parameter table at all:
+**Three** suites, and the split matters — see the BUG entry in section 2. The
+DSP suite is SDK-free and therefore cannot see the parameter table at all
+(`tools/run-tests.sh` runs all three, plus the script guards):
 
 ```sh
 c++ -std=c++17 -O2 -Isource tests/DspTests.cpp source/VocalFilterDsp.cpp \
@@ -1339,7 +1340,14 @@ c++ -std=c++17 -O2 -Isource -Iexternal/vst3sdk \
     -o /tmp/paramstests && /tmp/paramstests
 ```
 
-Sixty-three DSP assertions and twenty-five parameter assertions, all passing — each suite prints its own total, and these were counted from that output rather than incremented by hand, which is how the figure had drifted twice before. The ones worth knowing about:
+The third, `tests/LayoutTests.cpp`, builds the same way against
+`VocalFilterParams.cpp` and `VocalFilterDsp.cpp` and holds the panel's tables
+to fitting, aligning and not overlapping.
+
+Eighty-seven DSP, thirty-seven parameter and 203 layout assertions, all
+passing at 1.3.0.0. These are counted from each suite's printed `ok` lines,
+not incremented by hand; the figure had drifted twice before. The ones worth
+knowing about:
 
 * **§3 compares the RUNNING filter against the curve the editor would DRAW**,
   across 240 log-spaced bins from 50 Hz to 16 kHz. This is the one that caught
@@ -1370,6 +1378,13 @@ Sixty-three DSP assertions and twenty-five parameter assertions, all passing —
   the one the control asked for. It also proves the distances really differ
   (142:1), that a glide of 0 is floored rather than instant, and that the
   fastest legal glide is 30 dB quieter at 6–12 kHz than a snap.
+* **§11 is Level Comp, measured rather than trusted.** Pink noise goes
+  through the running filter for all ten vowels at 100 % and 50 % wet, and is
+  read with a K-weighted meter written independently of the model. With Level
+  Comp on, the output must land within 0.5 LU of the input; with it off, the
+  loss must be the model's prediction. It also covers the silence clamp,
+  tracking through a glide with no step over 0.25 dB, and 44.1 k agreeing
+  with 96 k (DEVIATION 5).
 
 Compare spectra, not samples, when a filter changes: four poles delay the
 signal even where their magnitude is flat, so two runs with identical spectra

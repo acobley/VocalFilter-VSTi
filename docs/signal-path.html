@@ -16,7 +16,7 @@
 <p class="sub">Three bandpass resonators in parallel per channel. Drawn from <code>Dsp::process</code> and <code>VocalFilterProcessor::pushParameters</code>. The two channels are identical and share coefficients; only their filter state differs, so one is drawn.</p>
 
 <svg viewBox="0 0 1240 720" width="1240" height="720" role="img"
-     aria-label="Signal flow diagram. A control plane along the top takes either a vowel preset - from the male or female table, chosen by the Voice switch - or the nine formant parameters, selected by the Vowel mode, through glide ramps into biquad coefficients, which feed a parallel bank of three bandpass filters. The audio input splits into that bank and a dry path; the bank's three outputs are scaled and summed, with F2 inverted, then crossfaded against dry and scaled by output trim. A dashed tap carries the live formant values out through read-only parameters to the controller and the response display.">
+     aria-label="Signal flow diagram. A control plane along the top takes either a vowel preset - from the male or female table, chosen by the Voice switch - or the nine formant parameters, selected by the Vowel mode, through glide ramps into biquad coefficients, which feed a parallel bank of three bandpass filters. The audio input splits into that bank and a dry path; the bank's three outputs are scaled and summed, with F2 inverted, then crossfaded against dry, scaled by the optional Level Comp make-up gain and by output trim. The make-up gain is computed in the control plane from a model of the bank, the formants as they glide and the dry/wet mix. A dashed tap carries the live formant values and the make-up gain out through read-only parameters to the controller, the response display and the Level Comp reading.">
   <defs>
     <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0,1 L9,5 L0,9 z" fill="#2f6296"/>
@@ -86,6 +86,14 @@
   <path class="wc" d="M770,134 V180 H400 V222" marker-end="url(#ac)"/>
   <text class="note" x="560" y="174" text-anchor="middle">to all three</text>
 
+  <rect class="bx ctl" x="910" y="88" width="305" height="46"/>
+  <text class="t" x="1062" y="108" text-anchor="middle">Level Comp model</text>
+  <text class="s" x="1062" y="124" text-anchor="middle">pink × K-weighted power of the whole line</text>
+  <path class="wc" d="M875,111 H910" marker-end="url(#ac)"/>
+  <text class="note" x="1062" y="152" text-anchor="middle">every 32 samples while a glide or Mix moves</text>
+  <text class="note" x="1062" y="166" text-anchor="middle">reads Dry / Wet too · Off is exactly ×1</text>
+  <path class="wc" d="M1062,172 V300 H945 V336" marker-end="url(#ac)"/>
+
   <!-- ==================== AUDIO ==================== -->
   <text class="lane" x="30" y="212" fill="#2f6296">AUDIO — one channel of two</text>
 
@@ -138,22 +146,27 @@
   <text class="s" x="331" y="598" text-anchor="middle">unfiltered</text>
   <path class="wa" d="M180,365 V583 H236" marker-end="url(#aa)"/>
 
-  <rect class="bx aud" x="740" y="336" width="150" height="58"/>
-  <text class="t" x="815" y="359" text-anchor="middle">Dry / Wet</text>
-  <text class="s" x="815" y="377" text-anchor="middle">0–100 %</text>
-  <path class="wa" d="M620,365 H740" marker-end="url(#aa)"/>
-  <text class="note" x="680" y="356" text-anchor="middle">wet</text>
-  <path class="wa" d="M426,583 H815 V394" marker-end="url(#aa)"/>
+  <rect class="bx aud" x="720" y="336" width="130" height="58"/>
+  <text class="t" x="785" y="359" text-anchor="middle">Dry / Wet</text>
+  <text class="s" x="785" y="377" text-anchor="middle">0–100 %</text>
+  <path class="wa" d="M620,365 H720" marker-end="url(#aa)"/>
+  <text class="note" x="670" y="356" text-anchor="middle">wet</text>
+  <path class="wa" d="M426,583 H785 V394" marker-end="url(#aa)"/>
 
-  <rect class="bx out" x="930" y="336" width="150" height="58"/>
-  <text class="t" x="1005" y="359" text-anchor="middle">Output Trim</text>
-  <text class="s" x="1005" y="377" text-anchor="middle">−60 … 0 dB</text>
-  <path class="wo" d="M890,365 H930" marker-end="url(#ao)"/>
+  <rect class="bx out" x="880" y="336" width="130" height="58"/>
+  <text class="t" x="945" y="359" text-anchor="middle">Level Comp</text>
+  <text class="s" x="945" y="377" text-anchor="middle">make-up, ±24 dB</text>
+  <path class="wo" d="M850,365 H880" marker-end="url(#ao)"/>
 
-  <rect class="bx neu" x="1120" y="336" width="95" height="58"/>
-  <text class="t" x="1167" y="360" text-anchor="middle">Out</text>
-  <text class="s" x="1167" y="377" text-anchor="middle">stereo</text>
-  <path class="wo" d="M1080,365 H1120" marker-end="url(#ao)"/>
+  <rect class="bx out" x="1040" y="336" width="110" height="58"/>
+  <text class="t" x="1095" y="359" text-anchor="middle">Output Trim</text>
+  <text class="s" x="1095" y="377" text-anchor="middle">−60 … +12 dB</text>
+  <path class="wo" d="M1010,365 H1040" marker-end="url(#ao)"/>
+
+  <rect class="bx neu" x="1170" y="336" width="58" height="58"/>
+  <text class="t" x="1199" y="360" text-anchor="middle">Out</text>
+  <text class="s" x="1199" y="377" text-anchor="middle">stereo</text>
+  <path class="wo" d="M1150,365 H1170" marker-end="url(#ao)"/>
 
   <!-- ==================== DISPLAY TAP ==================== -->
   <text class="lane" x="30" y="648" fill="#8b8b82">OBSERVATION — nothing below this line is in the audio path</text>
@@ -163,7 +176,10 @@
 
   <rect class="bx obs" x="470" y="636" width="270" height="52"/>
   <text class="t" x="605" y="658" text-anchor="middle">outputParameterChanges</text>
-  <text class="s" x="605" y="675" text-anchor="middle">9 read-only, hidden</text>
+  <text class="s" x="605" y="675" text-anchor="middle">9 + 1 read-only, hidden</text>
+
+  <path class="tap" d="M945,394 V610 H700 V636" marker-end="url(#at)"/>
+  <text class="note" x="957" y="556">the make-up applied</text>
 
   <rect class="bx obs" x="790" y="636" width="130" height="52"/>
   <text class="t" x="855" y="658" text-anchor="middle">Controller</text>
@@ -171,8 +187,8 @@
   <path class="tap" d="M740,662 H790" marker-end="url(#at)"/>
 
   <rect class="bx obs" x="970" y="636" width="245" height="52"/>
-  <text class="t" x="1092" y="658" text-anchor="middle">Response display</text>
-  <text class="s" x="1092" y="675" text-anchor="middle">F1 F2 F3 and the sum</text>
+  <text class="t" x="1092" y="658" text-anchor="middle">Displays and reading</text>
+  <text class="s" x="1092" y="675" text-anchor="middle">F1 F2 F3, the sum · Level Comp</text>
   <path class="tap" d="M920,662 H970" marker-end="url(#at)"/>
 </svg>
 
@@ -191,6 +207,7 @@
   <div>
     <h2>The display reads published values</h2>
     <p>It follows the <em>gliding</em> values, which live in the processor, so they cross to the controller as nine read-only hidden parameters. Not a message: a message sent from <code>process()</code> is silently discarded by the host's connection proxy.</p>
+    <p>The Level Comp gain travels the same way, as a tenth read-only parameter, so the reading under its selector shows what is being applied — including mid-glide.</p>
     <p>The sample rate does travel by message, from <code>setActive</code>, where the UI thread makes one legal.</p>
   </div>
 </div>

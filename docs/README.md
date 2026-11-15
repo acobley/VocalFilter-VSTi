@@ -30,7 +30,7 @@ grey dashed is observation. **Nothing drawn dashed is in the audio path.**
 Regenerate it after any change to the routing: the HTML is hand-authored and
 the PNG is rendered from it, so the two only stay in step deliberately.
 
-It is worth having because three things about this plug-in are easier to see
+It is worth having because four things about this plug-in are easier to see
 than to read:
 
 * **F2 is summed inverted.** Between F1 and F2 the two branches are half a
@@ -46,7 +46,12 @@ than to read:
   filters.
 * **The display reads published values, not parameters.** The nine read-only
   hidden parameters exist because a message sent from `process()` is silently
-  discarded by the host's connection proxy.
+  discarded by the host's connection proxy. The Level Comp gain is a tenth,
+  for the reading under its selector.
+* **Level Comp is computed, not measured.** Its gain comes from a model of
+  the whole line in the control plane: the formants as they glide, plus
+  Dry / Wet. It never listens to the audio, so it sits in the audio path as a
+  plain gain stage between Dry / Wet and Trim.
 
 ## Guards
 
