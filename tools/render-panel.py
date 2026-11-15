@@ -20,7 +20,7 @@ own, and needs no fonts. The drawing helpers are R2Synth's
 What it cannot show is VSTGUI's own rendering: this is a reconstruction
 from the same numbers, not a screenshot.
 
-    python3 tools/render-panel.py [out.png] [selected-vowel] [voice]
+    python3 tools/render-panel.py [out.png] [selected-vowel] [voice] [level-comp 0/1]
 
 `selected-vowel` is 0 for Manual (what a fresh instance loads with, and the
 default) or 1..5; `voice` is 0 (male, the default) or 1 (female).
@@ -44,7 +44,7 @@ SCALE = 2          # the PNG is drawn at 2x, like a Retina screen
 SS = 4             # ...from a 4x drawing, for smooth curves
 
 
-def dump(selector, voice):
+def dump(selector, voice, level_comp=0):
     with tempfile.TemporaryDirectory() as work:
         exe = os.path.join(work, 'dump-layout')
         cxx = os.environ.get('CXX', 'c++')
@@ -53,7 +53,8 @@ def dump(selector, voice):
                         os.path.join(HERE, 'dump-layout.cpp'),
                         os.path.join(ROOT, 'source', 'VocalFilterParams.cpp'),
                         os.path.join(ROOT, 'source', 'VocalFilterDsp.cpp'), '-o', exe], check=True)
-        out = subprocess.run([exe, str(selector), str(voice)], check=True, capture_output=True, text=True)
+        out = subprocess.run([exe, str(selector), str(voice), str(level_comp)], check=True, capture_output=True,
+                             text=True)
         return json.loads(out.stdout)
 
 
@@ -650,11 +651,23 @@ def buttons(img):
 
 
 def switch(d, c):
+    """Panel::SegmentSwitch::draw. With a reading (Level Comp) the slot is
+    the top of the rectangle, and the reading and label sit at its foot on
+    the knobs' lines."""
     S = L['styles']
-    r = c['r']
+    whole = c['r']
+    r = list(whole)
+    if c['hasReading']:
+        r[3] = r[1] + L['switchSlot']
+        cx = (whole[0] + whole[2]) / 2
+        top = whole[3] - L['switchReadingBand']
+        lit = L['levelComp'] != 0
+        lettering(d, c['reading'], S['value'], INK if lit else LABEL, cx, top + L['knobValueH'] / 2, 'centre')
+        lettering(d, c['label'].upper(), S['label'], LABEL, cx, top + L['knobValueH'] + L['knobLabelH'] / 2,
+                  'centre')
     round_rect(d, [r[0] + 0.6, r[1] + 0.6, r[2] - 0.6, r[3] - 0.6], 3, fill=HEADER, outline=SECTION_EDGE, width=1.2)
-    names = ['Male', 'Female']
-    segw = (r[2] - r[0] - 4) / 2
+    names = c['names']
+    segw = (r[2] - r[0] - 4) / len(names)
     cur = int(round(c['value']))
     for i, nm in enumerate(names):
         seg = [r[0] + 2 + i * segw, r[1] + 2, r[0] + 2 + (i + 1) * segw, r[3] - 2]
@@ -682,7 +695,8 @@ def main():
     out_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, 'docs', 'panel.png')
     selector = int(sys.argv[2]) if len(sys.argv) > 2 else 0
     voice = int(sys.argv[3]) if len(sys.argv) > 3 else 0
-    L = dump(selector, voice)
+    level_comp = int(sys.argv[4]) if len(sys.argv) > 4 else 0
+    L = dump(selector, voice, level_comp)
     L['width'], L['height'] = L['size']
     L['headerHeight'] = L['header']
 

@@ -11,6 +11,7 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 using namespace Steinberg;
@@ -75,6 +76,7 @@ tresult PLUGIN_API VocalFilterProcessor::setActive (TBool state)
 		pushParameters ();
 		mDsp.reset ();
 		mWasGliding = true;              // publish once on the first block
+		mPublishedCompDb = 1e9;          // and the Level Comp gain
 		sendSampleRateToController ();
 	}
 	return AudioEffect::setActive (state);
@@ -148,7 +150,7 @@ void VocalFilterProcessor::applyParameterChanges (IParameterChanges* changes)
 		// table.
 		if (id == kBypass)
 			mBypass = (value >= 0.5);
-		else if (id < kNumParams && !isLiveParam (id))
+		else if (id < kNumParams && !isPublishedParam (id))
 			mParams[id] = value;      // the published ones are ours to write
 	}
 }
@@ -247,6 +249,26 @@ void VocalFilterProcessor::publishLiveValues (IParameterChanges* out)
 }
 
 //------------------------------------------------------------------------
+void VocalFilterProcessor::publishLevelComp (IParameterChanges* out)
+{
+	if (out == nullptr)
+		return;
+
+	const double db = mDsp.levelCompDb ();
+	if (std::fabs (db - mPublishedCompDb) < 0.02)
+		return;
+
+	const double n = std::min (1.0, std::max (0.0, kParams[kLiveLevelComp].toNormalized (db)));
+	int32 index = 0;
+	if (IParamValueQueue* queue = out->addParameterData (kLiveLevelComp, index))
+	{
+		int32 point = 0;
+		if (queue->addPoint (0, n, point) == kResultOk)
+			mPublishedCompDb = db;
+	}
+}
+
+//------------------------------------------------------------------------
 tresult PLUGIN_API VocalFilterProcessor::process (ProcessData& data)
 {
 	// Flush-to-zero for this call only; the host's FPU mode comes back on
@@ -265,6 +287,13 @@ tresult PLUGIN_API VocalFilterProcessor::process (ProcessData& data)
 	if (gliding || mWasGliding)
 		publishLiveValues (data.outputParameterChanges);
 	mWasGliding = gliding;
+
+	// AND THE LEVEL COMP GAIN, for the reading under its switch - only when
+	// it has moved by more than the reading can show, so a settled patch
+	// costs nothing. The gain is the value at the end of the PREVIOUS
+	// block: one block late, which a reading at the timer's rate cannot
+	// see.
+	publishLevelComp (data.outputParameterChanges);
 
 	// A parameter-only block. Legal, and common when a host is drawing
 	// automation while the transport is stopped.

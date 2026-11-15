@@ -822,9 +822,38 @@ The tests assert:
   speech spectrum rather than adding a fudge factor.
 * **The −0.1…−0.4 LU residual fully wet.** This is the gap between Kellet's
   pink filter and the model's exact pink. It is not a level error in the line.
-* **No panel switch yet.** Level Comp has no switch on the panel and no
-  read-out of the applied gain. Both need a place in the Output section and
-  the matching LayoutTests and render-panel.py work.
+
+**On the panel (15 Nov 2026).** There is an **Off | On** switch in the Output
+section, with the make-up gain read out under it.
+
+* **The reading's source.** The processor publishes the gain as parameter 24,
+  `kLiveLevelComp`: −24…+24 dB, read-only, hidden, not saved. It is sent only
+  when it moves by 0.02 dB or more, so a settled patch publishes nothing. It
+  sits outside the nine-value `kLiveBase` block, because ids never move. A new
+  predicate, `isPublishedParam`, is therefore what the processor refuses, the
+  controller hides and the editor ignores. `isLiveParam` still means only "the
+  nine the displays read", and it alone sets `hasLiveValues`. This is the
+  Voice-switch trap the other way round: widening `isLiveParam` instead would
+  have let a gain arriving before any formant value claim the host forwards
+  the nine.
+* **Fallback.** If the host never forwards published values, the editor runs
+  `levelCompensationDb` on the targets itself, so the reading is still the
+  model's number rather than a stuck 0.
+* **The control.** It is `Panel::SegmentSwitch` given a label. The slot takes
+  the top 24 px, and the reading and label are drawn at the rectangle's foot,
+  on the lines a knob's would be. The names come from `enumChoiceName`, so the
+  Voice switch is built the same way and no longer hard-codes "Male / Female".
+  The reading is "+16.0 dB", or a plain "0.0 dB" at rest, from
+  `Layout::levelCompReading`, which the tests share. It is white while Level
+  Comp is on or still easing out, and grey when it is off.
+* **Placement.** Centred between the rule after Trim and the section's edge
+  (1008–1128). The slot is centred on the knobs' centre line and the reading
+  is on Trim's line, and LayoutTests holds all three to that. The three-line
+  "Mix + Trim ease in…" note that used to be there moved under OUTPUT's title
+  as "stereo, one model / Mix + Trim ease in; / Comp follows the Glide".
+* **Rendering.** `dump-layout` prints switch names and the reading, and takes
+  Level Comp as a third argument. `render-panel.py` draws the reading and
+  takes Level Comp as a fourth argument.
 
 ---
 

@@ -66,6 +66,9 @@ const ParamDef kParams[kNumParams] =
 	// Off by default: a fresh instance, and every project saved before the
 	// switch existed, sound exactly as they did.
 	{ kLevelComp,                   "Level Comp",   "",   ParamType::Enum,  0.0,                 kLevelCompCount - 1, kLevelCompOff,                  0.0,                 kLevelCompCount - 1, kLevelCompCount - 1, false },
+
+	// Published: the make-up being applied, for the panel's reading.
+	{ kLiveLevelComp,               "Level Comp Gain", "dB", ParamType::Float, -kLevelCompMaxDb, kLevelCompMaxDb,    0.0,                            -kLevelCompMaxDb,    kLevelCompMaxDb,     0,    false },
 };
 
 //------------------------------------------------------------------------
@@ -74,7 +77,11 @@ const ParamDef kParams[kNumParams] =
 // wrong place is exactly the kind of mistake that presents as "the width
 // slider moves the level".
 //------------------------------------------------------------------------
-static_assert (kNumParams == 24, "thirteen settings, nine published values, the voice and Level Comp");
+static_assert (kNumParams == 25, "thirteen settings, nine published values, the voice, Level Comp and its gain");
+static_assert (isPublishedParam (kLiveLevelComp) && ! isLiveParam (kLiveLevelComp),
+               "the Level Comp gain is published, but not one of the nine the displays read");
+static_assert (! isPublishedParam (kLevelComp) && ! isPublishedParam (kVoice),
+               "the switches are settings");
 static_assert (kNumStoredParams == 13, "only the settings are saved");
 
 // The published block ends exactly where kVoice begins. If another id is ever

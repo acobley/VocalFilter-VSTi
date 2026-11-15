@@ -126,6 +126,7 @@ private:
 	Panel::VowelPad* mPad = nullptr;
 	Panel::Spectrum* mSpectrum = nullptr;
 	Panel::GlideMeter* mGlideMeter = nullptr;
+	Panel::SegmentSwitch* mLevelCompSwitch = nullptr;   // also in mControls; this one gets the reading
 	Panel::TextLine* mEngineLine = nullptr;
 
 	VSTGUI::SharedPointer<VSTGUI::CVSTGUITimer> mTimer;

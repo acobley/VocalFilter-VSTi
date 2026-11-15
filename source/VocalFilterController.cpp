@@ -58,7 +58,7 @@ void VocalFilterController::addParameters ()
 		// exist only as the route data.outputParameterChanges travels on.
 		// kIsHidden implies kIsReadOnly and the absence of kCanAutomate,
 		// but saying both is clearer than relying on that.
-		int32 flags = isLiveParam (id)
+		int32 flags = isPublishedParam (id)
 			? (ParameterInfo::kIsReadOnly | ParameterInfo::kIsHidden)
 			: ParameterInfo::kCanAutomate;
 

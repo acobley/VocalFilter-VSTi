@@ -48,7 +48,7 @@ void section (const char* title) { std::printf ("\n%s\n", title); }
     be hard to change one without noticing the other. */
 bool processorWouldRecord (ParamID id)
 {
-	return id < kNumParams && !isLiveParam (id);
+	return id < kNumParams && !isPublishedParam (id);
 }
 
 } // namespace
@@ -118,8 +118,8 @@ int main ()
 		       "all 15 settings, listed by name, are recordable by the processor");
 
 		// And that list is the whole of the non-published table.
-		check (sizeof (kSettings) / sizeof (kSettings[0]) == kNumParams - 9,
-		       "the settings list covers every id that is not a published value");
+		check (sizeof (kSettings) / sizeof (kSettings[0]) == kNumParams - 10,
+		       "the settings list covers every id that is not a published value (nine + the gain)");
 
 		// The published ones must NOT be, or a host could write over the
 		// values the DSP is publishing.
@@ -259,6 +259,32 @@ int main ()
 		       "Off and On round-trip through the normalised value");
 		check (processorWouldRecord (kLevelComp) && ! isFormantParam (kLevelComp),
 		       "the processor records it, and a vowel preset does not override it");
+	}
+
+	//--------------------------------------------------------------------
+	section ("8. The Level Comp GAIN - published, refused, not saved");
+	//--------------------------------------------------------------------
+	{
+		check (isPublishedParam (kLiveLevelComp) && ! processorWouldRecord (kLiveLevelComp),
+		       "the gain is published, and refused from outside");
+		check (! isLiveParam (kLiveLevelComp),
+		       "it is not one of the nine values the displays read (hasLiveValues)");
+		check (kLiveLevelComp >= kNumStoredParams, "it is past the stored block, so never saved");
+
+		// Exactly the nine and the gain are published - listed, not derived.
+		bool exact = true;
+		for (ParamID id = 0; id < kNumParams; ++id)
+		{
+			const bool wanted = (id >= kLiveF1Freq && id <= kLiveF3Level) || id == kLiveLevelComp;
+			if (isPublishedParam (id) != wanted) exact = false;
+		}
+		check (exact, "isPublishedParam is true for ids 13..21 and 24, and no others");
+
+		const ParamDef& g = kParams[kLiveLevelComp];
+		check (g.plainMin == -kLevelCompMaxDb && g.plainMax == kLevelCompMaxDb && g.plainDefault == 0.0,
+		       "its range is the clamp, both ways, resting at 0 dB");
+		check (std::fabs (g.toPlain (g.toNormalized (16.0)) - 16.0) < 1e-9,
+		       "a gain round-trips through the normalised value");
 	}
 
 	std::printf ("\n%s\n", gFailures == 0 ? "all tests passed" : "TESTS FAILED");

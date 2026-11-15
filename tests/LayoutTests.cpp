@@ -155,11 +155,19 @@ int main ()
 				++voice;
 		check (voice == 1, "Voice has exactly one control");
 
+		int comp = 0;
+		for (const auto& c : kControls)
+			if (c.tag == kLevelComp)
+				++comp;
+		check (comp == 1, "Level Comp has exactly one control");
+
+		// isPublishedParam, not isLiveParam: the Level Comp GAIN is
+		// published too, and lies outside the nine-value block.
 		bool noLive = true;
 		for (const auto& c : kControls)
-			if (isLiveParam (c.tag))
+			if (isPublishedParam (c.tag))
 				noLive = false;
-		check (noLive, "no published (read-only) value has a control");
+		check (noLive, "no published (read-only) value has a control - the gain included");
 	}
 
 	//--------------------------------------------------------------------
@@ -278,6 +286,66 @@ int main ()
 			check (Lettering::width (voiceName (i), kTextPill) <= (sw.width - 4) / 2.0 - 8,
 			       std::string (voiceName (i)) + " fits its half of the Voice switch");
 		}
+
+		// ---- the Level Comp switch, its reading and its label ---------------
+		const Control* lc = nullptr;
+		const Control* trim = nullptr;
+		for (const auto& c : kControls)
+		{
+			if (c.tag == kLevelComp) lc = &c;
+			if (c.tag == kOutputTrim) trim = &c;
+		}
+		check (lc != nullptr && lc->kind == Kind::Switch && lc->reading,
+		       "Level Comp is a switch with a reading under it");
+		if (lc && trim)
+		{
+			for (int i = 0; i < kLevelCompCount; ++i)
+				check (Lettering::width (levelCompName (i), kTextPill) <= (lc->width - 4) / 2.0 - 8,
+				       std::string (levelCompName (i)) + " fits its half of the Level Comp switch");
+
+			// The widest reading the editor can write: the clamp, both signs,
+			// and every tenth between.
+			double widest = 0.0;
+			std::string which;
+			for (int t = -240; t <= 240; ++t)
+			{
+				const std::string r = levelCompReading (t / 10.0);
+				const double w = Lettering::width (r, kTextValue);
+				if (w > widest) { widest = w; which = r; }
+			}
+			check (widest <= lc->width, "Level Comp: widest reading \"" + which + "\" (" + px (widest) +
+			                                ") fits " + std::to_string (lc->width));
+			check (allDrawn ("+-0123456789. dB"), "every character of the reading has a glyph");
+			check (levelCompReading (16.04) == "+16.0 dB" && levelCompReading (0.01) == "0.0 dB" &&
+			       levelCompReading (-3.0) == "-3.0 dB",
+			       "the reading is signed to a tenth, and plain 0.0 dB at rest");
+			check (Lettering::width (lc->label, kTextLabel) <= lc->width, "Level Comp: label fits");
+
+			// THE ROW: the slot room above the reading, and the reading and
+			// label on exactly the lines Trim's are on.
+			const Rect r = controlRect (*lc);
+			check (r.height () >= kSwitchSlotHeight + kSwitchReadingBand + 4,
+			       "the slot and the reading band do not collide");
+			const int compText = r.bottom - kSwitchReadingBand;
+			const int trimText = trim->y + trim->diameter + kKnobGap;
+			check (compText == trimText, "its reading is on Trim's line (" + std::to_string (compText) + ")");
+			const double slotCentre = r.top + kSwitchSlotHeight / 2.0;
+			const double knobCentre = trim->y + trim->diameter / 2.0;
+			check (std::fabs (slotCentre - knobCentre) <= 1.0, "its slot is centred on the knobs' centre line");
+
+			// Right of the rule after Trim, and centred in the room it has.
+			const Rect& rule = kRules[3];
+			check (r.left >= rule.right + 12, "it sits right of the rule after Trim");
+			const double room = (rule.right + kOutputRect.right - kSectionPadX) / 2.0;
+			check (std::fabs ((r.left + r.right) / 2.0 - room) <= 2.0,
+			       "and centred between the rule and the section's edge");
+		}
+
+		// The notes under OUTPUT stay under its title box, not in it.
+		const Box ob = titleBox (kSections[3]);
+		for (const auto& cap : kCaptions)
+			if (cap.r.left < 780 && cap.r.top > kOutputRect.top)
+				check (cap.r.top >= ob.bottom + 2, std::string ("\"") + cap.text + "\" is clear of OUTPUT's title box");
 	}
 
 	//--------------------------------------------------------------------
@@ -383,6 +451,7 @@ int main ()
 		for (const auto& sec : kSections) { need (sec.title); need (sec.subtitle); }
 		for (const auto& c : kCaptions) need (c.text);
 		for (const auto& c : kControls) need (c.label);
+		for (int i = 0; i < kLevelCompCount; ++i) need (levelCompName (i));
 		for (int v = 0; v <= kVowelCount; ++v) need (vowelSelectionName (v));
 		need (kManualHint);
 		need ("F1 \xE2\x86\x93 close \xE2\x80\xA6 open");

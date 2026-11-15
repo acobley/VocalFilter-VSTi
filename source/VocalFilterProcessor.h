@@ -59,6 +59,9 @@ private:
 	    data.outputParameterChanges and not a message. */
 	void publishLiveValues (Steinberg::Vst::IParameterChanges* out);
 
+	/** Publish the Level Comp gain (kLiveLevelComp), when it has moved. */
+	void publishLevelComp (Steinberg::Vst::IParameterChanges* out);
+
 	/** Processor -> controller, from setActive - a UI-thread caller, so a
 	    message is legal here. */
 	void sendSampleRateToController ();
@@ -74,6 +77,9 @@ private:
 	/** Publishing every block would be waste; publishing only on change
 	    would miss the last frame of a glide. This tracks the edge. */
 	bool mWasGliding = true;
+
+	/** The Level Comp gain last published, in dB; 1e9 = never. */
+	double mPublishedCompDb = 1e9;
 
 	/** 64-bit processing goes through these. The line is float, as the
 	    original plug-ins were, but a 64-bit host is accepted rather than

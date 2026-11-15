@@ -101,6 +101,16 @@ enum Param : Steinberg::Vst::ParamID
 	    Off and sound as they were made. */
 	kLevelComp,                                      // 23
 
+	/** THE MAKE-UP GAIN LEVEL COMP IS APPLYING NOW, in dB - published by
+	    the processor for the reading under the panel's switch, exactly as
+	    the nine formant values are for the displays. Read-only, hidden,
+	    not saved. 0 dB while Level Comp is off.
+	 *
+	 *  OUTSIDE THE kLiveBase BLOCK, because ids are never moved, so it is
+	 *  NOT isLiveParam: use isPublishedParam for "may the host write
+	 *  this", which is the question that matters. */
+	kLiveLevelComp,                                  // 24
+
 	kNumParams
 };
 
@@ -137,6 +147,16 @@ constexpr Steinberg::Vst::ParamID kLiveEnd = kLiveBase + kFormantCount * 3;
 constexpr bool isLiveParam (Steinberg::Vst::ParamID id)
 {
 	return id >= kLiveBase && id < kLiveEnd;
+}
+
+/** EVERY value the processor publishes and nothing outside the plug-in may
+    write: the nine formant values AND the Level Comp gain. This, not
+    isLiveParam, is what the processor refuses, the controller hides and
+    the editor ignores - isLiveParam is only "the nine the displays
+    read". */
+constexpr bool isPublishedParam (Steinberg::Vst::ParamID id)
+{
+	return isLiveParam (id) || id == kLiveLevelComp;
 }
 
 /** The settings run from 0 to here; the published values follow and are

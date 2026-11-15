@@ -181,12 +181,19 @@ void VocalFilterEditor::addControl (const Layout::Control& c)
 	if (c.kind == Layout::Kind::Switch)
 	{
 		auto* sw = new Panel::SegmentSwitch (r, this, static_cast<int32_t> (tag), c.accent);
-		// The only switch is Voice, and its names are voiceName()'s - the
-		// same words the controller gives the host.
+		// The names are enumChoiceName()'s - the same words the
+		// controller gives the host - one per position of the parameter.
 		std::vector<std::string> names;
-		for (int i = 0; i < kVoiceCount; ++i)
-			names.push_back (voiceName (i));
+		for (int i = 0; i <= static_cast<int> (paramDef (tag).plainMax); ++i)
+			names.push_back (enumChoiceName (tag, i));
 		sw->setNames (names);
+		if (c.reading)
+		{
+			sw->setLabel (c.label ? c.label : paramDef (tag).title);
+			sw->setReading (Layout::levelCompReading (0.0), false);
+		}
+		if (tag == kLevelComp)
+			mLevelCompSwitch = sw;
 		control = sw;
 	}
 	else
@@ -366,6 +373,23 @@ void VocalFilterEditor::refreshDisplay ()
 	state.toF2 = target[1].freqHz;
 	mPad->setState (state);
 
+	// ---- the Level Comp reading ---------------------------------------------
+	// What the processor says it is applying, once the host has shown it
+	// forwards published values; otherwise the same model, run here on the
+	// targets, so a host that drops them still gets an honest number.
+	if (mLevelCompSwitch)
+	{
+		const bool on = static_cast<int> (kParams[kLevelComp].toInternal (
+			mController->getParamNormalized (kLevelComp)) + 0.5) == kLevelCompOn;
+		double db = 0.0;
+		if (live)
+			db = plainOf (kLiveLevelComp);
+		else if (on)
+			db = levelCompensationDb (target, kFormantCount, plainOf (kMix), mController->dspSampleRate ());
+		// Lit while it is on, or still easing out after being switched off.
+		mLevelCompSwitch->setReading (Layout::levelCompReading (db), on || std::fabs (db) >= 0.05);
+	}
+
 	// ---- the glide meter and the engine line ------------------------------
 	char elapsed[32] = {};
 	if (mGliding)
@@ -430,6 +454,7 @@ void PLUGIN_API VocalFilterEditor::close ()
 	mSpectrum = nullptr;
 	mGlideMeter = nullptr;
 	mEngineLine = nullptr;
+	mLevelCompSwitch = nullptr;
 	mHaveTarget = false;
 	mGliding = false;
 
@@ -533,7 +558,7 @@ void VocalFilterEditor::updateControl (ParamID tag, ParamValue normalized)
 
 	// The published values have no control behind them; the timer picks
 	// them up.
-	if (isLiveParam (tag))
+	if (isPublishedParam (tag))
 		return;
 
 	// The selector - or the VOICE, which changes what every preset is -

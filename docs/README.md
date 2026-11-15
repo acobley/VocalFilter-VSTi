@@ -71,7 +71,11 @@ plug-in, and the curves are the plug-in's, not a re-implementation.
 python3 tools/render-panel.py                           # Manual, male: what a fresh instance loads
 python3 tools/render-panel.py docs/panel-vowel.png 1 0  # Aaaa, male voice
 python3 tools/render-panel.py docs/panel-female.png 4 1 # Oooo, female voice
+python3 tools/render-panel.py /tmp/comp.png 1 0 1       # Aaaa, male, Level Comp on (+16.0 dB)
 ```
+
+The fourth argument turns Level Comp on. The committed images leave it off,
+as a fresh instance does.
 
 It needs a C++ compiler, Pillow, and the SDK's headers in `external/vst3sdk`.
 What it cannot show: the glide (it draws the panel at rest), hover and press

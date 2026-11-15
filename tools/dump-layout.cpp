@@ -232,6 +232,7 @@ int main (int argc, char** argv)
 {
 	const int selector = (argc > 1) ? std::atoi (argv[1]) : kVowelManual;
 	const int voice = (argc > 2) ? std::atoi (argv[2]) : kVoiceMale;
+	const int levelComp = (argc > 3) ? std::atoi (argv[3]) : kLevelCompOff;
 	const double sampleRate = 48000.0;
 
 	// What the DSP would be using: the preset, or the parameters' defaults.
@@ -254,6 +255,8 @@ int main (int argc, char** argv)
 	std::printf ("\"headerDivider\": %d, \"wordmarkGap\": %d, \"sectionRadius\": %d,\n", kHeaderDivider,
 	             kWordmarkGap, kSectionRadius);
 	std::printf ("\"knobGap\": %d, \"knobValueH\": %d, \"knobLabelH\": %d,\n", kKnobGap, kKnobValueH, kKnobLabelH);
+	std::printf ("\"switchSlot\": %d, \"switchReadingBand\": %d, \"levelComp\": %d,\n", kSwitchSlotHeight,
+	             kSwitchReadingBand, levelComp);
 	std::printf ("\"manualHint\": \"%s\",\n", esc (kManualHint).c_str ());
 	std::printf ("\"screws\": [");
 	for (size_t i = 0; i < sizeof (kScrews) / sizeof (kScrews[0]); ++i)
@@ -299,16 +302,35 @@ int main (int argc, char** argv)
 		double normalized = def.defaultNormalized ();
 		if (c.tag == kVoice)
 			normalized = voice;
+		if (c.tag == kLevelComp)
+			normalized = levelComp ? 1.0 : 0.0;
 		if (preset && isFormantParam (c.tag))
 		{
 			const int k = (c.tag - kFormantBase) / 3, field = (c.tag - kFormantBase) % 3;
 			const double plain = field == 0 ? preset[k].freqHz : field == 1 ? preset[k].bandwidthHz : preset[k].levelDb;
 			normalized = def.toNormalized (plain);
 		}
+		// A switch: its position NAMES, and - for one with a reading under
+		// it (Level Comp) - that reading, from the same model and format
+		// the editor uses, at the factory Dry / Wet.
+		std::string names = "[";
+		std::string reading = readout (def, normalized);
+		if (c.kind == Kind::Switch)
+		{
+			for (int n = 0; n <= static_cast<int> (def.plainMax); ++n)
+				names += std::string (n ? ", " : "") + "\"" + esc (enumChoiceName (c.tag, n)) + "\"";
+			normalized = std::floor (normalized * def.plainMax + 0.5);   // the index
+			if (c.tag == kLevelComp)
+				reading = levelCompReading (levelComp ? levelCompensationDb (shown, kFormantCount, kMixDefault,
+				                                                             sampleRate)
+				                                      : 0.0);
+		}
+		names += "]";
 		std::printf ("  {\"kind\": \"%s\", \"accent\": \"%s\", \"label\": \"%s\", \"diameter\": %d, "
-		             "\"value\": %.6f, \"reading\": \"%s\", \"r\": [%d, %d, %d, %d]}%s\n",
+		             "\"value\": %.6f, \"reading\": \"%s\", \"names\": %s, \"hasReading\": %s, "
+		             "\"r\": [%d, %d, %d, %d]}%s\n",
 		             c.kind == Kind::Knob ? "knob" : "switch", accentName (c.accent), esc (c.label).c_str (),
-		             c.diameter, normalized, readout (def, normalized).c_str (),
+		             c.diameter, normalized, reading.c_str (), names.c_str (), c.reading ? "true" : "false",
 		             r.left, r.top, r.right, r.bottom, i + 1 < kNumControls ? "," : "");
 	}
 	std::printf ("],\n");

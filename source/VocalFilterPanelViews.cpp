@@ -750,7 +750,7 @@ void Knob::onMouseWheelEvent (MouseWheelEvent& event)
 }
 
 //------------------------------------------------------------------------
-// SegmentSwitch - R2Synth's, unchanged
+// SegmentSwitch - R2Synth's, plus the reading and label under the slot
 //------------------------------------------------------------------------
 SegmentSwitch::SegmentSwitch (const CRect& size, IControlListener* listener, int32_t tag,
                               Layout::Accent accent)
@@ -779,10 +779,37 @@ void SegmentSwitch::select (int index)
 	invalid ();
 }
 
+void SegmentSwitch::setReading (const std::string& reading, bool lit)
+{
+	if (reading != mReading || lit != mReadingLit)
+	{
+		mReading = reading;
+		mReadingLit = lit;
+		invalid ();
+	}
+}
+
 void SegmentSwitch::draw (CDrawContext* context)
 {
-	const CRect r = getViewSize ();
+	const CRect whole = getViewSize ();
 	context->setDrawMode (kAntiAliasing | kNonIntegralMode);
+
+	// With a label, the slot is the top of the rectangle and the reading
+	// and label sit at its foot; without one the slot is all of it.
+	CRect r (whole);
+	if (!mLabel.empty ())
+	{
+		r.bottom = r.top + Layout::kSwitchSlotHeight;
+
+		const CCoord cx = (whole.left + whole.right) / 2.;
+		const CCoord textTop = whole.bottom - Layout::kSwitchReadingBand;
+		if (!mReading.empty ())
+			drawLettering (context, mReading, Layout::kTextValue,
+			               mReadingLit ? Palette::kInk : Palette::kLabel, cx,
+			               textTop + Layout::kKnobValueH / 2., Align::Centre);
+		drawLettering (context, mLabel, Layout::kTextLabel, Palette::kLabel, cx,
+		               textTop + Layout::kKnobValueH + Layout::kKnobLabelH / 2., Align::Centre);
+	}
 
 	CRect outer (r);
 	outer.inset (0.6, 0.6);

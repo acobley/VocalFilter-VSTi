@@ -26,7 +26,7 @@
 //   |  vowels, the dot, the glide +--------------------------------+
 //   |                             | FORMANTS  F1 | F2 | F3 knobs    |
 //   | [a][i][I][o][u]   (Glide)   +--------------------------------+
-//   | [ MANUAL       ]   progress | OUTPUT   Dry/Wet  Trim          |
+//   | [ MANUAL       ]   progress | OUTPUT  Dry/Wet Trim [Off|On]  |
 //   +-----------------------------+--------------------------------+
 //
 // THE PAD IS THE PARAMETER SPACE. Its axes run over exactly the F1 and F2
@@ -55,6 +55,8 @@
 #include "VocalFilterParams.h"
 
 #include <cmath>
+#include <cstdio>
+#include <string>
 
 namespace VocalFilter {
 namespace Layout {
@@ -100,6 +102,26 @@ constexpr int kKnobTextBand  = kKnobGap + kKnobValueH + kKnobLabelH;
 
 /** A segmented switch that sits in a section's title row. */
 constexpr int kTitleSwitchHeight = 24;
+
+/** A segmented switch WITH A READING AND A LABEL under it, the way a knob
+    has - the Level Comp switch. The slot is the title switch's height;
+    the reading and label take the bottom of the rectangle, so they land
+    on the same lines as the knobs' beside it when the bottoms agree. */
+constexpr int kSwitchSlotHeight   = kTitleSwitchHeight;
+constexpr int kSwitchReadingBand  = kKnobValueH + kKnobLabelH;
+
+/** The Level Comp reading: the make-up being applied, to a tenth of a dB,
+    signed - "+16.0 dB" - and a plain "0.0 dB" when there is none. Here, so
+    the editor and the tests format the same string. */
+inline std::string levelCompReading (double db)
+{
+	char buffer[24];
+	if (std::fabs (db) < 0.05)
+		std::snprintf (buffer, sizeof (buffer), "0.0 dB");
+	else
+		std::snprintf (buffer, sizeof (buffer), "%+.1f dB", db);
+	return buffer;
+}
 
 //------------------------------------------------------------------------
 // The lettering - SciFiLettering.h's face at the panel's sizes. Cap
@@ -202,6 +224,7 @@ struct Control
 	int    diameter;    // knobs only; 0 for a switch
 	const char* label;
 	int    height = 0;  // switches only
+	bool   reading = false;   // switches only: a reading and the label under the slot
 };
 
 constexpr Rect controlRect (const Control& c)
@@ -245,6 +268,12 @@ constexpr Control kControls[] = {
 	// ---- the output -----------------------------------------------------
 	{ kMix,        Kind::Knob, Accent::Mint, 786, 538, 72, 34, "Dry / Wet" },
 	{ kOutputTrim, Kind::Knob, Accent::Mint, 876, 538, 72, 34, "Trim" },
+
+	// LEVEL COMP, Off | On, with the make-up it is applying read out under
+	// the slot. Its slot is centred on the knobs' centre line (555) and its
+	// rectangle ends on their bottom (599), so the reading and the label
+	// sit on the same lines as Dry / Wet's and Trim's.
+	{ kLevelComp,  Kind::Switch, Accent::Mint, 1008, 543, 120, 0, "Level Comp", 56, true },
 };
 constexpr int kNumControls = static_cast<int> (sizeof (kControls) / sizeof (kControls[0]));
 
@@ -334,10 +363,11 @@ constexpr Caption kCaptions[] = {
 	{ "F3", CaptionStyle::Block, Accent::Violet, { formantCol (2) + 2, 390, formantCol (2) + 26,  404 } },
 	{ "knob only", CaptionStyle::Note, Accent::Violet, { formantCol (2) + 28, 390, formantCol (2) + 176, 404 } },
 
-	{ "stereo, one model", CaptionStyle::Note, Accent::Mint, { 606, 578, 770, 592 } },
-	{ "Mix + Trim ease in",             CaptionStyle::Note, Accent::Mint, { 978, 556, 1170, 570 } },
-	{ "over 10 ms; formants",           CaptionStyle::Note, Accent::Mint, { 978, 572, 1170, 586 } },
-	{ "follow the Glide",               CaptionStyle::Note, Accent::Mint, { 978, 588, 1170, 602 } },
+	// The note that used to sit right of the rule moved under the section's
+	// title when Level Comp took its place.
+	{ "stereo, one model",              CaptionStyle::Note, Accent::Mint, { 606, 564, 770, 578 } },
+	{ "Mix + Trim ease in;",            CaptionStyle::Note, Accent::Mint, { 606, 580, 770, 594 } },
+	{ "Comp follows the Glide",         CaptionStyle::Note, Accent::Mint, { 606, 596, 770, 610 } },
 };
 constexpr int kNumCaptions = static_cast<int> (sizeof (kCaptions) / sizeof (kCaptions[0]));
 

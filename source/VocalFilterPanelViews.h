@@ -220,7 +220,12 @@ private:
 //------------------------------------------------------------------------
 /** A SEGMENTED SWITCH - the Voice switch: a white-framed black slot, one
     segment per named position, the current one printed white with black
-    lettering; a click selects, the wheel steps. */
+    lettering; a click selects, the wheel steps.
+
+    Given a LABEL, it is the Level Comp switch instead: the slot takes the
+    top Layout::kSwitchSlotHeight of the rectangle and a reading and the
+    label are printed under it, on the lines a knob's would be. The whole
+    rectangle is still the target. */
 class SegmentSwitch : public VSTGUI::CControl
 {
 public:
@@ -228,6 +233,14 @@ public:
 	               Layout::Accent accent);
 
 	void setNames (const std::vector<std::string>& names) { mNames = names; invalid (); }
+
+	/** Under the slot: the label, in capitals. Empty (the default) is a
+	    bare slot filling the rectangle. */
+	void setLabel (const std::string& label) { mLabel = upper (label); invalid (); }
+
+	/** The reading over the label - white when `lit`, the label's grey
+	    when not. Repaints only if something changed. */
+	void setReading (const std::string& reading, bool lit);
 
 	void draw (VSTGUI::CDrawContext* context) override;
 	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
@@ -243,6 +256,9 @@ private:
 
 	Layout::Accent mAccent;
 	std::vector<std::string> mNames;
+	std::string mLabel;
+	std::string mReading;
+	bool mReadingLit = false;
 };
 
 //------------------------------------------------------------------------
