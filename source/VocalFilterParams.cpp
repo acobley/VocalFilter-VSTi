@@ -62,6 +62,10 @@ const ParamDef kParams[kNumParams] =
 	{ kLiveF3Level,                 "F3 Live Level","dB", ParamType::Float, kLevelMinDb,         kLevelMaxDb,         kAaaFormants[2].levelDb,        kLevelMinDb,         kLevelMaxDb,         0,    false },
 
 	{ kVoice,                       "Voice",        "",   ParamType::Enum,  0.0,                 kVoiceCount - 1,     kVoiceMale,                     0.0,                 kVoiceCount - 1,     kVoiceCount - 1, false },
+
+	// Off by default: a fresh instance, and every project saved before the
+	// switch existed, sound exactly as they did.
+	{ kLevelComp,                   "Level Comp",   "",   ParamType::Enum,  0.0,                 kLevelCompCount - 1, kLevelCompOff,                  0.0,                 kLevelCompCount - 1, kLevelCompCount - 1, false },
 };
 
 //------------------------------------------------------------------------
@@ -70,7 +74,7 @@ const ParamDef kParams[kNumParams] =
 // wrong place is exactly the kind of mistake that presents as "the width
 // slider moves the level".
 //------------------------------------------------------------------------
-static_assert (kNumParams == 23, "thirteen settings, nine published values, and the voice");
+static_assert (kNumParams == 24, "thirteen settings, nine published values, the voice and Level Comp");
 static_assert (kNumStoredParams == 13, "only the settings are saved");
 
 // The published block ends exactly where kVoice begins. If another id is ever
@@ -78,6 +82,7 @@ static_assert (kNumStoredParams == 13, "only the settings are saved");
 // nothing, which is how it presented the first time.
 static_assert (kLiveEnd == kVoice, "the published block must end at kVoice");
 static_assert (! isLiveParam (kVoice), "kVoice is a SETTING, not a published value");
+static_assert (! isLiveParam (kLevelComp), "kLevelComp is a SETTING, not a published value");
 static_assert (isLiveParam (kLiveF1Freq) && isLiveParam (kLiveF3Level),
                "the nine published values are live");
 static_assert (! isLiveParam (kMix) && ! isLiveParam (kGlide),

@@ -84,6 +84,7 @@ peak at all — §2d has the measurements.
 | **Output Trim** | −60 … +12 dB | 0 |
 | **Vowel** | Manual, Aaaa, Eeee, Iiii, Oooo, Uuuu | Manual |
 | **Voice** | Male, Female | Male |
+| **Level Comp** | Off, On | Off |
 
 **Glide** is how long a formant takes to reach a new value. It is a timed
 linear ramp, one length for all nine parameters, so however far each has to
@@ -101,6 +102,16 @@ processor the same way, so it works with the editor closed and under
 automation, and a voice change glides exactly as a vowel change does — it just
 moves F2 by at most 3.8 semitones against up to 16.8, so the same Glide time
 sounds far less dramatic.
+
+**Level Comp** adds a make-up gain so the output stays at about the input's
+loudness. A formant bank throws most of the spectrum away, so fully wet it is
+roughly 14–16 LU quieter than its input, by an amount that changes with every
+vowel. The gain is worked out from the filter itself — vowel, voice, the
+formant settings and Dry / Wet — rather than from the audio. So it follows a
+glide, never pumps and adds no latency. Pink noise comes out within half an LU
+of where it went in; other sources land near that. It is off by default, so
+projects saved before it existed sound unchanged. In this version it is a host
+parameter only and has no switch on the panel yet.
 
 ### The panel
 

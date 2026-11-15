@@ -197,6 +197,8 @@ void VocalFilterProcessor::pushParameters ()
 	}
 
 	mDsp.setMixPercent (plainValue (mParams.data (), kMix));
+	mDsp.setLevelComp (static_cast<int> (
+		kParams[kLevelComp].toInternal (mParams[kLevelComp]) + 0.5) == kLevelCompOn);
 	mDsp.setTrimNormalized (mParams[kOutputTrim]);
 }
 
@@ -409,6 +411,13 @@ tresult PLUGIN_API VocalFilterProcessor::setState (IBStream* state)
 			          std::max (0.0, static_cast<double> (voice))));
 	}
 
+	// kLevelComp after kVoice, the same way: absent in a stream saved
+	// before it existed, so that project loads OFF and sounds as it did.
+	mParams[kLevelComp] = kParams[kLevelComp].defaultNormalized ();
+	int32 levelComp = 0;
+	if (streamer.readInt32 (levelComp))
+		mParams[kLevelComp] = kParams[kLevelComp].toNormalized (levelComp ? kLevelCompOn : kLevelCompOff);
+
 	pushParameters ();
 	mDsp.snapParameters ();   // a load is not a 10 ms ramp from the old value
 
@@ -439,6 +448,11 @@ tresult PLUGIN_API VocalFilterProcessor::getState (IBStream* state)
 	// before the switch existed - still gets a complete, valid state.
 	if (!streamer.writeInt32 (static_cast<int32> (
 			kParams[kVoice].toInternal (mParams[kVoice]) + 0.5)))
+		return kResultFalse;
+
+	// And Level Comp after the voice, for the same reason.
+	if (!streamer.writeInt32 (static_cast<int32> (
+			kParams[kLevelComp].toInternal (mParams[kLevelComp]) + 0.5)))
 		return kResultFalse;
 
 	return kResultOk;

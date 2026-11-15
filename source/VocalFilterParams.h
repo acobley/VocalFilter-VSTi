@@ -94,6 +94,13 @@ enum Param : Steinberg::Vst::ParamID
 	    rule. See VocalFilterProcessor::getState. */
 	kVoice,                                          // 22
 
+	/** Level Comp: Off / On. A make-up gain computed from the filter, so
+	    the output stays at the input's loudness whatever the vowel - see
+	    LevelCompModel in VocalFilterDsp.h. Appended, saved explicitly
+	    after kVoice, and ABSENT from older streams, which therefore load
+	    Off and sound as they were made. */
+	kLevelComp,                                      // 23
+
 	kNumParams
 };
 
@@ -134,7 +141,8 @@ constexpr bool isLiveParam (Steinberg::Vst::ParamID id)
 
 /** The settings run from 0 to here; the published values follow and are
     NOT saved, because they are a view of the DSP rather than a setting.
-    kVoice sits past them and is saved separately - see the state code. */
+    kVoice and kLevelComp sit past them and are saved separately - see
+    the state code. */
 constexpr Steinberg::Vst::ParamID kNumStoredParams = kLiveBase;
 
 /** The name of one choice of an enumerated parameter. */
@@ -142,6 +150,8 @@ inline const char* enumChoiceName (Steinberg::Vst::ParamID id, int choice)
 {
 	if (id == kVoice)
 		return voiceName (choice);
+	if (id == kLevelComp)
+		return levelCompName (choice);
 	return vowelSelectionName (choice);
 }
 

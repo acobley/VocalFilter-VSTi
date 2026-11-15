@@ -166,6 +166,13 @@ tresult PLUGIN_API VocalFilterController::setComponentState (IBStream* state)
 			          std::max (0.0, static_cast<double> (voice)))));
 	}
 
+	// Then Level Comp - absent in an older stream, which therefore loads Off.
+	setParamNormalized (kLevelComp, kParams[kLevelComp].defaultNormalized ());
+	int32 levelComp = 0;
+	if (streamer.readInt32 (levelComp))
+		setParamNormalized (kLevelComp,
+			kParams[kLevelComp].toNormalized (levelComp ? kLevelCompOn : kLevelCompOff));
+
 	return kResultOk;
 }
 

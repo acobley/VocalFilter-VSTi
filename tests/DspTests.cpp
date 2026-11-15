@@ -112,6 +112,76 @@ void sine (std::vector<float>& out, double freqHz, double sampleRate, double amp
 			std::sin (2.0 * M_PI * freqHz * static_cast<double> (i) / sampleRate));
 }
 
+
+//------------------------------------------------------------------------
+/** Pink noise, Paul Kellet's refined filter on a fixed-seed LCG - the same
+    sequence every run, so the suite cannot flake. */
+std::vector<float> pinkNoise (int frames, unsigned seed = 12345u)
+{
+	std::vector<float> out (static_cast<std::size_t> (frames));
+	unsigned state = seed;
+	double b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+	for (int i = 0; i < frames; ++i)
+	{
+		state = state * 1664525u + 1013904223u;
+		const double white = (static_cast<double> (state >> 8) / 16777216.0) * 2.0 - 1.0;
+		b0 = 0.99886 * b0 + white * 0.0555179;
+		b1 = 0.99332 * b1 + white * 0.0750759;
+		b2 = 0.96900 * b2 + white * 0.1538520;
+		b3 = 0.86650 * b3 + white * 0.3104856;
+		b4 = 0.55000 * b4 + white * 0.5329522;
+		b5 = -0.7616 * b5 - white * 0.0168980;
+		const double pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+		b6 = white * 0.115926;
+		out[static_cast<std::size_t> (i)] = static_cast<float> (pink * 0.05);
+	}
+	return out;
+}
+
+/** Ungated K-weighted loudness of a mono signal at 48 kHz, in LUFS-style
+    dB (the -0.691 offset included, though only DIFFERENCES are tested).
+    A test-side meter, written from BS.1770 directly - deliberately NOT
+    kWeightingPower, so a wrong weight in the model is caught here. */
+double loudness48k (const std::vector<float>& x, std::size_t skip)
+{
+	const double sb[3] = { 1.53512485958697, -2.69169618940638, 1.19839281085285 };
+	const double sa[3] = { 1.0, -1.69065929318241, 0.73248077421585 };
+	const double hb[3] = { 1.0, -2.0, 1.0 };
+	const double ha[3] = { 1.0, -1.99004745483398, 0.99007225036621 };
+	double s1 = 0, s2 = 0, h1 = 0, h2 = 0, sum = 0;
+	std::size_t n = 0;
+	for (std::size_t i = 0; i < x.size (); ++i)
+	{
+		const double in = x[i];
+		const double y = sb[0] * in + s1;
+		s1 = sb[1] * in - sa[1] * y + s2;
+		s2 = sb[2] * in - sa[2] * y;
+		const double z = hb[0] * y + h1;
+		h1 = hb[1] * y - ha[1] * z + h2;
+		h2 = hb[2] * y - ha[2] * z;
+		if (i >= skip) { sum += z * z; ++n; }
+	}
+	return -0.691 + 10.0 * std::log10 (std::max (sum / std::max<std::size_t> (n, 1), 1e-30));
+}
+
+/** Loudness out minus loudness in, pink noise, with everything snapped. */
+double loudnessChange (const FormantSetting* formants, double mixPercent, bool comp)
+{
+	constexpr double rate = 48000.0;
+	constexpr int frames = 48000 * 5;
+	constexpr std::size_t skip = 48000 / 2;      // the resonators settle
+
+	Dsp dsp;
+	dsp.setSampleRate (rate);
+	applyPatch (dsp, formants, mixPercent);
+	dsp.setLevelComp (comp);
+	dsp.reset ();
+
+	const std::vector<float> in = pinkNoise (frames);
+	std::vector<float> outL (in.size ()), outR (in.size ());
+	dsp.process (in.data (), in.data (), outL.data (), outR.data (), frames);
+	return loudness48k (outL, skip) - loudness48k (in, skip);
+}
 } // namespace
 
 //------------------------------------------------------------------------
@@ -1066,6 +1136,132 @@ int main ()
 			check (before != 0.f && inside == 0.f && after == before,
 			       "ScopedFlushDenormals: flush-to-zero inside, the host's mode restored after");
 		}
+	}
+
+
+	section ("11. LEVEL COMP: pink noise comes out as loud as it went in");
+	{
+		// The model's own claim, measured through the RUNNING filter with
+		// a meter written independently of it. Every vowel, both voices,
+		// fully wet and half wet.
+		double worst = 0.0, worstOff = 0.0;
+		double minLoss = 1e9, maxLoss = -1e9;
+		for (int voice = 0; voice < kVoiceCount; ++voice)
+		{
+			for (int v = 0; v < kVowelCount; ++v)
+			{
+				const FormantSetting* f = vowelTable (voice)[v].formants;
+				for (double mix : { 100.0, 50.0 })
+				{
+					const double on  = loudnessChange (f, mix, true);
+					const double off = loudnessChange (f, mix, false);
+					const double predicted = levelCompensationDb (f, kFormantCount, mix, 48000.0);
+					std::printf ("    %-6s %s  mix %3.0f%%   off %+6.2f LU   on %+5.2f LU   make-up %5.2f dB\n",
+					             voiceName (voice), vowelTable (voice)[v].name, mix, off, on, predicted);
+					worst = std::max (worst, std::fabs (on));
+					// Off, the loss is what the model says it is.
+					worstOff = std::max (worstOff, std::fabs (off + predicted));
+					if (mix == 100.0)
+					{
+						minLoss = std::min (minLoss, -off);
+						maxLoss = std::max (maxLoss, -off);
+					}
+				}
+			}
+		}
+		check (worst < 0.5, "Comp on: every vowel within 0.5 LU of its input");
+		check (worstOff < 0.5, "Comp off: the loss is the model's prediction, within 0.5 LU");
+		check (minLoss > 10.0, "Comp off, fully wet: every vowel loses over 10 LU (why it exists)");
+		check (maxLoss - minLoss > 1.5,
+		       "the loss differs by vowel by over 1.5 LU (why one fixed number will not do)");
+	}
+	{
+		// Off is the line as it was: no gain at all, exactly.
+		Dsp dsp;
+		dsp.setSampleRate (48000.0);
+		applyPatch (dsp, kAaaFormants);
+		dsp.reset ();
+		check (dsp.levelCompDb () == 0.0 && ! dsp.levelComp (),
+		       "default is Off, and Off applies exactly 0 dB");
+
+		// A manual patch is compensated too - the model reads the formants,
+		// not a table of vowels.
+		const FormantSetting odd[kFormantCount] = {
+			{ 500.0, 300.0, -6.0 }, { 1700.0, 30.0, 6.0 }, { 3500.0, 400.0, -12.0 } };
+		check (std::fabs (loudnessChange (odd, 100.0, true)) < 0.5,
+		       "a manual patch is compensated too, within 0.5 LU");
+	}
+	{
+		// Every level at silence: the clamp, not infinity, and not NaN.
+		const FormantSetting silent[kFormantCount] = {
+			{ 730.0, 80.0, kLevelMinDb }, { 1090.0, 90.0, kLevelMinDb }, { 2440.0, 120.0, kLevelMinDb } };
+		check (std::fabs (levelCompensationDb (silent, kFormantCount, 100.0, 48000.0) - kLevelCompMaxDb) < 1e-9,
+		       "every level at silence: make-up clamps at +24 dB");
+		Dsp dsp;
+		dsp.setSampleRate (48000.0);
+		applyPatch (dsp, silent);
+		dsp.setLevelComp (true);
+		dsp.reset ();
+		std::vector<float> in = pinkNoise (4800), outL (4800), outR (4800);
+		dsp.process (in.data (), in.data (), outL.data (), outR.data (), 4800);
+		bool finite = true;
+		for (float v : outL) finite = finite && std::isfinite (v);
+		check (finite && peak (outL) == 0.0, "  ... and the output is silence, not noise or NaN");
+
+		// Dry: nothing to make up.
+		check (std::fabs (levelCompensationDb (kAaaFormants, kFormantCount, 0.0, 48000.0)) < 1e-9,
+		       "fully dry: make-up is exactly 0 dB");
+	}
+	{
+		// IT FOLLOWS A GLIDE, and lands on the new vowel's value, eased -
+		// never a step.
+		Dsp dsp;
+		dsp.setSampleRate (48000.0);
+		dsp.setGlideMs (150.0);
+		applyPatch (dsp, vowelTable (kVoiceMale)[1].formants);    // Eeee
+		dsp.setLevelComp (true);
+		dsp.reset ();
+		const double from = dsp.levelCompDb ();
+		check (std::fabs (from - levelCompensationDb (vowelTable (kVoiceMale)[1].formants,
+		                                              kFormantCount, 100.0, 48000.0)) < 1e-6,
+		       "snapped: the applied make-up is the model's, exactly");
+
+		applyPatch (dsp, vowelTable (kVoiceMale)[3].formants);    // Oooo
+		std::vector<float> z (48000, 0.0f), oL (48000), oR (48000);
+		double biggestStep = 0.0, last = from;
+		bool midway = false;
+		for (int b = 0; b < 48000 / 64; ++b)
+		{
+			dsp.process (z.data (), z.data (), oL.data (), oR.data (), 64);
+			const double now = dsp.levelCompDb ();
+			biggestStep = std::max (biggestStep, std::fabs (now - last));
+			if (b == 50 && dsp.gliding ())        // ~67 ms in
+				midway = std::fabs (now - from) > 0.2;
+			last = now;
+		}
+		const double to = levelCompensationDb (vowelTable (kVoiceMale)[3].formants,
+		                                       kFormantCount, 100.0, 48000.0);
+		check (midway, "the make-up moves DURING the glide, not after it");
+		check (std::fabs (last - to) < 0.01, "after the glide it lands on the new vowel's make-up");
+		check (biggestStep < 0.25, "no step larger than 0.25 dB per 64 samples");
+
+		// Switching Comp on eases in rather than stepping.
+		Dsp d2;
+		d2.setSampleRate (48000.0);
+		applyPatch (d2, kAaaFormants);
+		d2.reset ();
+		d2.setLevelComp (true);
+		d2.process (z.data (), z.data (), oL.data (), oR.data (), 64);
+		const double early = d2.levelCompDb ();
+		d2.process (z.data (), z.data (), oL.data (), oR.data (), 9600);
+		check (early > 0.0 && early < 5.0 && d2.levelCompDb () > 15.0,
+		       "switching it on eases in over ~20 ms rather than stepping");
+	}
+	{
+		// The model is of the filter, not of a sample rate.
+		const double a = levelCompensationDb (kAaaFormants, kFormantCount, 100.0, 44100.0);
+		const double b = levelCompensationDb (kAaaFormants, kFormantCount, 100.0, 96000.0);
+		check (std::fabs (a - b) < 0.1, "the same patch needs the same make-up at 44.1 k and 96 k");
 	}
 
 	std::printf ("\n%s\n", gFailures == 0 ? "all tests passed" : "TESTS FAILED");

@@ -173,6 +173,148 @@ double bankMagnitude (const FormantSetting* formants, int count,
 }
 
 //------------------------------------------------------------------------
+// Level Comp
+//------------------------------------------------------------------------
+namespace {
+
+/** One biquad's |H|^2 at `freqHz`, for a filter DESIGNED at `designRate`. */
+double biquadPower (const double b[3], const double a[3], double freqHz, double designRate)
+{
+	const double w = 2.0 * M_PI * freqHz / designRate;
+	const double c1 = std::cos (w), s1 = std::sin (w);
+	const double c2 = std::cos (2.0 * w), s2 = std::sin (2.0 * w);
+	const double nr = b[0] + b[1] * c1 + b[2] * c2, ni = -(b[1] * s1 + b[2] * s2);
+	const double dr = a[0] + a[1] * c1 + a[2] * c2, di = -(a[1] * s1 + a[2] * s2);
+	const double d = dr * dr + di * di;
+	return (d > 1e-30) ? (nr * nr + ni * ni) / d : 0.0;
+}
+
+constexpr double kGridLowHz  = 20.0;
+constexpr double kGridHighHz = 20000.0;
+
+} // namespace
+
+//------------------------------------------------------------------------
+double kWeightingPower (double freqHz)
+{
+	// BS.1770-4's two stages, as published for 48 kHz. The WEIGHT is a
+	// function of frequency, not of the plug-in's rate, so it is always
+	// evaluated on the 48 kHz design - valid to 24 kHz, above the grid.
+	static const double shelfB[3] = { 1.53512485958697, -2.69169618940638, 1.19839281085285 };
+	static const double shelfA[3] = { 1.0,              -1.69065929318241, 0.73248077421585 };
+	static const double hpB[3]    = { 1.0, -2.0, 1.0 };
+	static const double hpA[3]    = { 1.0, -1.99004745483398, 0.99007225036621 };
+
+	return biquadPower (shelfB, shelfA, freqHz, 48000.0)
+	     * biquadPower (hpB, hpA, freqHz, 48000.0);
+}
+
+//------------------------------------------------------------------------
+void LevelCompModel::setSampleRate (double sampleRate)
+{
+	const double fs = (sampleRate > 0.0) ? sampleRate : 44100.0;
+	if (fs == mSampleRate)
+		return;
+	mSampleRate = fs;
+
+	// Stop short of the bandpass's own centre ceiling at low rates, so the
+	// grid never asks about a frequency the line cannot produce.
+	const double high = std::min (kGridHighHz, fs * kMaxCentreFraction);
+	const double ratio = std::log (high / kGridLowHz);
+
+	mCount = kPoints;
+	mWeightSum = 0.0;
+	for (int i = 0; i < kPoints; ++i)
+	{
+		// Log-spaced, so equal weight per point IS pink noise; the
+		// K-weighting is the only shaping on top.
+		const double f = kGridLowHz * std::exp (ratio * i / (kPoints - 1));
+		const double w = 2.0 * M_PI * f / fs;
+		mCos1[i] = std::cos (w);
+		mSin1[i] = std::sin (w);
+		mCos2[i] = std::cos (2.0 * w);
+		mSin2[i] = std::sin (2.0 * w);
+		mWeight[i] = kWeightingPower (f);
+		mWeightSum += mWeight[i];
+	}
+}
+
+//------------------------------------------------------------------------
+double LevelCompModel::weightedPowerGain (const double* freqHz, const double* bandwidthHz,
+                                          const double* gainLinear, double mix) const
+{
+	if (mCount == 0 || mWeightSum <= 0.0)
+		return 1.0;
+
+	const double m = std::min (1.0, std::max (0.0, mix));
+
+	// The SAME coefficients the running filter uses - same clamps, same
+	// design - so the model is of what is heard.
+	BandpassCoeffs c[kFormantCount];
+	double g[kFormantCount];
+	for (int k = 0; k < kFormantCount; ++k)
+	{
+		c[k] = bandpassCoeffs (freqHz[k], bandwidthHz[k], mSampleRate);
+		g[k] = gainLinear[k] * kFormantPolarity[k] * m;
+	}
+
+	double sum = 0.0;
+	for (int i = 0; i < mCount; ++i)
+	{
+		// The dry path, then each formant summed COMPLEX - as bankMagnitude
+		// does and for the same reason.
+		double re = 1.0 - m, im = 0.0;
+		for (int k = 0; k < kFormantCount; ++k)
+		{
+			const double nr = c[k].b0 + c[k].b1 * mCos1[i] + c[k].b2 * mCos2[i];
+			const double ni =         -(c[k].b1 * mSin1[i] + c[k].b2 * mSin2[i]);
+			const double dr = 1.0     + c[k].a1 * mCos1[i] + c[k].a2 * mCos2[i];
+			const double di =         -(c[k].a1 * mSin1[i] + c[k].a2 * mSin2[i]);
+			const double d = dr * dr + di * di;
+			if (d < 1e-30)
+				continue;
+			re += g[k] * (nr * dr + ni * di) / d;
+			im += g[k] * (ni * dr - nr * di) / d;
+		}
+		sum += mWeight[i] * (re * re + im * im);
+	}
+	return sum / mWeightSum;
+}
+
+//------------------------------------------------------------------------
+double LevelCompModel::compensationGain (const double* freqHz, const double* bandwidthHz,
+                                         const double* gainLinear, double mix) const
+{
+	const double power = weightedPowerGain (freqHz, bandwidthHz, gainLinear, mix);
+	const double maxGain = std::pow (10.0, kLevelCompMaxDb / 20.0);
+	if (power <= 1e-30)
+		return maxGain;
+	const double gain = 1.0 / std::sqrt (power);
+	return std::min (maxGain, std::max (1.0 / maxGain, gain));
+}
+
+//------------------------------------------------------------------------
+double levelCompensationDb (const FormantSetting* formants, int count,
+                            double mixPercent, double sampleRate)
+{
+	if (formants == nullptr || count != kFormantCount)
+		return 0.0;
+
+	double f[kFormantCount], b[kFormantCount], g[kFormantCount];
+	for (int k = 0; k < kFormantCount; ++k)
+	{
+		f[k] = formants[k].freqHz;
+		b[k] = formants[k].bandwidthHz;
+		g[k] = dbToLinear (formants[k].levelDb, kLevelMinDb);
+	}
+
+	// About 19 kB, off the audio thread - this is for tests and displays.
+	static thread_local LevelCompModel model;
+	model.setSampleRate (sampleRate);
+	return 20.0 * std::log10 (model.compensationGain (f, b, g, mixPercent / 100.0));
+}
+
+//------------------------------------------------------------------------
 void Biquad::setBandpass (double centreHz, double bandwidthHz, double sampleRate)
 {
 	const BandpassCoeffs c = bandpassCoeffs (centreHz, bandwidthHz, sampleRate);
@@ -191,6 +333,8 @@ void Dsp::setSampleRate (double sampleRate)
 {
 	mSampleRate = (sampleRate > 0.0) ? sampleRate : 44100.0;
 	mSmoothCoeff = 1.0 - std::exp (-1.0 / (kSmoothSeconds * mSampleRate));
+	mCompModel.setSampleRate (mSampleRate);
+	mCompDirty = true;
 	updateCoefficients ();
 }
 
@@ -239,6 +383,7 @@ void Dsp::setFormant (int index, double freqHz, double bandwidthHz, double level
 		// so all three are snapped before any of them can glide.
 		if (index == kFormantCount - 1)
 			mSeeded = true;
+		mCompDirty = true;
 		return;
 	}
 
@@ -294,6 +439,32 @@ void Dsp::setTrimNormalized (double normalized)
 }
 
 //------------------------------------------------------------------------
+void Dsp::setLevelComp (bool on)
+{
+	if (on != mCompOn)
+	{
+		mCompOn = on;
+		mCompDirty = true;
+	}
+}
+
+//------------------------------------------------------------------------
+double Dsp::computeCompGain () const
+{
+	if (! mCompOn)
+		return 1.0;
+
+	double f[kFormantCount], b[kFormantCount], g[kFormantCount];
+	for (int k = 0; k < kFormantCount; ++k)
+	{
+		f[k] = mFormant[k].freq.value ();
+		b[k] = mFormant[k].bw.value ();
+		g[k] = mFormant[k].gain.value ();
+	}
+	return mCompModel.compensationGain (f, b, g, mMix);
+}
+
+//------------------------------------------------------------------------
 void Dsp::snapParameters ()
 {
 	for (Formant& f : mFormant)
@@ -304,6 +475,11 @@ void Dsp::snapParameters ()
 	}
 	mMix  = mMixTarget;
 	mTrim = mTrimTarget;
+
+	mCompTarget = mComp = computeCompGain ();
+	mCompDirty = false;
+	mCompWasMoving = false;
+	mCompCountdown = 0;
 
 	updateCoefficients ();
 	mCoeffCountdown = 0;
@@ -365,6 +541,22 @@ void Dsp::process (const float* inLeft, const float* inRight,
 			mCoeffCountdown = kCoeffUpdateSamples;
 		}
 
+		// Level Comp follows the formants and the mix. Recomputed only
+		// while one of them is moving, plus once after it stops so the
+		// gain lands on the settled value, plus whenever it was told to.
+		if (--mCompCountdown <= 0)
+		{
+			mCompCountdown = kCompUpdateSamples;
+			const bool moving = mCompOn && (gliding () || mMix != mMixTarget);
+			if (mCompDirty || moving || mCompWasMoving)
+			{
+				mCompTarget = computeCompGain ();
+				mCompDirty = false;
+			}
+			mCompWasMoving = moving;
+		}
+		mComp = smoothTowards (mComp, mCompTarget, mSmoothCoeff);
+
 		//----------------------------------------------------------------
 		// The bank. Parallel, summed, then mixed against the dry signal.
 		//----------------------------------------------------------------
@@ -383,8 +575,9 @@ void Dsp::process (const float* inLeft, const float* inRight,
 		const double left  = dryL + (wetL - dryL) * mMix;
 		const double right = dryR + (wetR - dryR) * mMix;
 
-		outLeft[i]  = flush (static_cast<float> (left  * mTrim));
-		outRight[i] = flush (static_cast<float> (right * mTrim));
+		const double out = mTrim * mComp;
+		outLeft[i]  = flush (static_cast<float> (left  * out));
+		outRight[i] = flush (static_cast<float> (right * out));
 	}
 }
 

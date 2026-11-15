@@ -377,6 +377,87 @@ constexpr const char* vowelSelectionName (int selector)
 }
 
 //------------------------------------------------------------------------
+/** LEVEL COMP - an optional make-up gain that holds the output at the
+    input's LOUDNESS, whatever the vowel, the voice, the formant settings
+    or the mix.
+ *
+ *  Why it is needed: three 0 dB-peak bandpasses 50-140 Hz wide pass a few
+ *  per cent of a broadband signal's energy, so the bank is 10-20 LU
+ *  quieter than its input - by an amount that changes with every vowel.
+ *  One fixed make-up number is right for none of them.
+ *
+ *  MODEL-BASED, NOT A FOLLOWER. The gain is computed from the filter the
+ *  DSP is running, not measured from the audio: the whole line's response
+ *
+ *      H(f) = (1 - mix) + mix * sum_k  polarity_k * A_k * BP_k(f)
+ *
+ *  is evaluated on a 1/48-octave grid from 20 Hz to 20 kHz, its power is
+ *  weighted by PINK NOISE (equal weight per grid point, since the grid is
+ *  logarithmic) times the BS.1770 K-WEIGHTING an LU meter applies, and the
+ *  make-up gain is 1/sqrt of that weighted power. Pink noise through the
+ *  line therefore comes out at the loudness it went in at, by
+ *  construction; tests/DspTests.cpp section 11 measures that through the
+ *  running filter.
+ *
+ *  So it cannot pump, cannot lift the noise in a pause, adds no latency and
+ *  is deterministic - it is a function of the settings, not of the music.
+ *  The price is that a source whose spectrum is not pink lands near, not
+ *  on, its input loudness. See ENGINEERING-NOTES DEVIATION 5.
+ *
+ *  1/48 octave because a formant's width must span at least a grid step or
+ *  the sum misses its energy: at Q 60, the bandpass ceiling, a formant is
+ *  1/42 octave wide. */
+constexpr double kLevelCompMaxDb = 24.0;    // either way: the clamp is symmetric
+constexpr int    kLevelCompOff   = 0;
+constexpr int    kLevelCompOn    = 1;
+constexpr int    kLevelCompCount = 2;
+
+constexpr const char* levelCompName (int choice)
+{
+	return (choice == kLevelCompOn) ? "On" : "Off";
+}
+
+/** The model behind Level Comp: a fixed grid of frequencies, with the
+    trigonometry and the loudness weight at each one computed ONCE per
+    sample rate, so an evaluation on the audio thread is arithmetic only.
+    No allocation - the grid is a member, fixed size. */
+class LevelCompModel
+{
+public:
+	static constexpr int kPoints = 480;     // 1/48 octave over ten octaves
+
+	void setSampleRate (double sampleRate);
+
+	/** The make-up gain, LINEAR, for formants at these frequencies, widths
+	    and LINEAR levels, mixed at `mix` (0 dry .. 1 wet). Clamped to
+	    +/- kLevelCompMaxDb, so a bank with every level at silence gets
+	    +24 dB of silence rather than infinity. */
+	double compensationGain (const double* freqHz, const double* bandwidthHz,
+	                         const double* gainLinear, double mix) const;
+
+	/** The weighted POWER gain of that line - what the make-up undoes.
+	    1.0 is "as loud as the input". */
+	double weightedPowerGain (const double* freqHz, const double* bandwidthHz,
+	                          const double* gainLinear, double mix) const;
+
+private:
+	double mSampleRate = 0.0;
+	int    mCount = 0;
+	double mWeightSum = 0.0;
+	double mCos1[kPoints] = {}, mSin1[kPoints] = {};
+	double mCos2[kPoints] = {}, mSin2[kPoints] = {};
+	double mWeight[kPoints] = {};
+};
+
+/** The Level Comp make-up, in dB, for a patch - the same model the DSP
+    runs, for the test suite and for anything that wants to show it. */
+double levelCompensationDb (const FormantSetting* formants, int count,
+                            double mixPercent, double sampleRate);
+
+/** |K(f)|^2, the ITU-R BS.1770 K-weighting an LU meter applies. */
+double kWeightingPower (double freqHz);
+
+//------------------------------------------------------------------------
 /** A LINEAR ramp of fixed duration - the thing a glide is made of.
  *
  *  Not a one-pole. A one-pole is the right smoother for a control that
@@ -503,6 +584,15 @@ public:
 	void setMixPercent (double percent);
 	void setTrimNormalized (double normalized);
 
+	/** Level Comp on or off. Off is exactly the line as it was before the
+	    switch existed: the make-up gain is 1.0 and nothing is computed. */
+	void setLevelComp (bool on);
+	bool levelComp () const { return mCompOn; }
+
+	/** The make-up gain being applied RIGHT NOW, in dB - 0 when Level
+	    Comp is off. */
+	double levelCompDb () const { return 20.0 * std::log10 (mComp > 1e-12 ? mComp : 1e-12); }
+
 	/** How long a formant takes to reach a new value. Applies to the NEXT
 	    move, not to one already under way. */
 	void setGlideMs (double milliseconds);
@@ -569,6 +659,21 @@ private:
 	// to arrive in step with anything.
 	double mMixTarget = 1.0, mMix = 1.0;      // 0 dry .. 1 wet
 	double mTrimTarget = 1.0, mTrim = 1.0;    // linear
+
+	// Level Comp. The target is recomputed from the model every
+	// kCompUpdateSamples while anything it depends on is moving (a glide,
+	// the Mix smoother) and once more after, then one-poled like Mix and
+	// Trim so a recompute is never a step. Settled, it costs nothing.
+	LevelCompModel mCompModel;
+	bool   mCompOn = false;
+	bool   mCompDirty = true;
+	bool   mCompWasMoving = false;
+	double mCompTarget = 1.0, mComp = 1.0;    // linear
+	int    mCompCountdown = 0;
+	static constexpr int kCompUpdateSamples = 32;
+
+	/** The make-up gain for where the formants and the mix are NOW. */
+	double computeCompGain () const;
 
 	double mGlideMs = kGlideDefaultMs;
 	bool   mSeeded = false;                   // first setFormant snaps rather than glides

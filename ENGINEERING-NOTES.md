@@ -747,6 +747,85 @@ the same balance and the Level sliders are where you shape it. The test suite
 asserts the profile is shared, so if per-vowel levels are ever derived
 properly this note is what fails and points at what was rejected.
 
+### DEVIATION 5: Level Comp, a make-up gain worked out from the model (15 Nov 2026)
+
+**Problem.** Testing measured the output 16.9 LU below the input. That is the
+loss a parallel bank of 0 dB-peak bandpasses 50–140 Hz wide is expected to
+have: it passes only a few per cent of a broadband signal's energy. The loss
+changes with the vowel, the voice, every formant setting and the mix, so a
+single fixed make-up number would be wrong almost everywhere. The trim also
+stops at +12 dB, which is not enough to put 16.9 back by hand.
+
+**What was built.** Parameter 23, **Level Comp** (Off / On). It is appended
+and saved after `kVoice`, and it is absent from older streams, so an old
+project loads with it Off. The gain comes from the filter the DSP is running,
+not from the audio: `LevelCompModel` (`VocalFilterDsp.h`) evaluates the whole
+line's complex response,
+
+```
+H(f) = (1 − mix) + mix · Σ polarity_k · A_k · BP_k(f)
+```
+
+on a 1/48-octave grid from 20 Hz to 20 kHz. It uses the same `bandpassCoeffs`
+as the running filter, so the model is of what is heard. It then weights |H|²
+by pink noise (equal weight per point on a log grid) × BS.1770 K-weighting,
+and applies `1 / sqrt(weighted power)`, clamped to ±24 dB. The gain sits
+after the mix and before the trim (`out = mix · trim · comp`), and bypass
+skips it.
+
+* **When it is recomputed.** Every 32 samples while a glide or the Mix
+  smoother is moving, once more after they stop, and when it is switched or
+  the sample rate changes. When settled it costs nothing. Changes are
+  one-poled over the same 20 ms as Mix and Trim, so a recompute or switching
+  it on never steps.
+* **Grid resolution.** 1/48 octave is the coarsest grid that resolves the
+  narrowest bandpass the line allows (Q 60 is about 1/42 octave).
+* **Why model-based rather than a loudness follower.** It cannot pump, lift
+  noise in a pause or fight the music's dynamics, it adds no latency, and it
+  is a pure function of the settings, so it can be tested.
+
+**Measured** (`DspTests` §11). Pink noise through the running filter, with a
+K-weighted meter written independently of `kWeightingPower`:
+
+```
+                 fully wet                    50 % wet
+           off LU   on LU   make-up      off LU   on LU
+Aaaa  M    −16.20   −0.23    15.97        −5.86   −0.01
+Eeee  M    −14.36   −0.40    13.97        −5.61   −0.04
+Iiii  M    −15.43   −0.12    15.31        −5.70   −0.01
+Oooo  M    −16.33   −0.19    16.14        −5.81   −0.01
+Uuuu  M    −15.86   −0.22    15.64        −5.75   −0.01
+(female within 0.2 LU of male throughout)
+```
+
+The tests assert:
+
+* with it on, every vowel in both voices is within 0.5 LU of the input;
+* with it off, the loss is the model's prediction;
+* the loss spans more than 1.5 LU across vowels, which is the reason a single
+  fixed number will not do;
+* a manual patch is compensated too;
+* with every level at silence the gain clamps at +24 dB and the output stays
+  silent;
+* fully dry, the make-up is exactly 0 dB;
+* the gain moves during a glide, lands on the new vowel's value and never
+  steps more than 0.25 dB per 64 samples;
+* switching it on eases in;
+* 44.1 k and 96 k agree.
+
+**Limits.**
+
+* **Non-pink sources.** A source whose spectrum is not pink lands near its
+  input loudness, not exactly on it. The 16.9 LU measured on test material
+  against the model's 14–16 dB is that gap. If real vocal material is
+  consistently off by a dB or two, change the weight to a long-term-average
+  speech spectrum rather than adding a fudge factor.
+* **The −0.1…−0.4 LU residual fully wet.** This is the gap between Kellet's
+  pink filter and the model's exact pink. It is not a level error in the line.
+* **No panel switch yet.** Level Comp has no switch on the panel and no
+  read-out of the applied gain. Both need a place in the Output section and
+  the matching LayoutTests and render-panel.py work.
+
 ---
 
 ## 2b. Denormals: Mix and Trim aimed at zero (1 Nov 2026)

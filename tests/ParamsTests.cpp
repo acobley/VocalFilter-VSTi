@@ -108,14 +108,14 @@ int main ()
 			kF1Freq, kF1Bandwidth, kF1Level,
 			kF2Freq, kF2Bandwidth, kF2Level,
 			kF3Freq, kF3Bandwidth, kF3Level,
-			kMix, kGlide, kVowel, kVoice };
+			kMix, kGlide, kVowel, kVoice, kLevelComp };
 
 		bool allSettingsRecordable = true;
 		for (ParamID id : kSettings)
 			if (! processorWouldRecord (id))
 				allSettingsRecordable = false;
 		check (allSettingsRecordable,
-		       "all 14 settings, listed by name, are recordable by the processor");
+		       "all 15 settings, listed by name, are recordable by the processor");
 
 		// And that list is the whole of the non-published table.
 		check (sizeof (kSettings) / sizeof (kSettings[0]) == kNumParams - 9,
@@ -238,6 +238,27 @@ int main ()
 		// which is the prompt to delete it.
 		check (kVoice >= kNumStoredParams,
 		       "kVoice sits past the stored block and is saved explicitly");
+		check (kLevelComp >= kNumStoredParams && kLevelComp == kVoice + 1,
+		       "kLevelComp follows kVoice and is saved explicitly after it");
+	}
+
+	//--------------------------------------------------------------------
+	section ("7. Level Comp - Off by default, Off/On, round-trips");
+	//--------------------------------------------------------------------
+	{
+		const ParamDef& d = kParams[kLevelComp];
+		check (d.type == ParamType::Enum && static_cast<int> (d.plainMax) == kLevelCompCount - 1,
+		       "Level Comp is a two-position enum");
+		check (static_cast<int> (d.toInternal (d.defaultNormalized ()) + 0.5) == kLevelCompOff,
+		       "its default is Off, so a fresh instance sounds as it did");
+		check (std::string (enumChoiceName (kLevelComp, kLevelCompOff)) == "Off" &&
+		       std::string (enumChoiceName (kLevelComp, kLevelCompOn)) == "On",
+		       "the host shows Off and On");
+		check (static_cast<int> (d.toInternal (d.toNormalized (kLevelCompOn)) + 0.5) == kLevelCompOn &&
+		       static_cast<int> (d.toInternal (d.toNormalized (kLevelCompOff)) + 0.5) == kLevelCompOff,
+		       "Off and On round-trip through the normalised value");
+		check (processorWouldRecord (kLevelComp) && ! isFormantParam (kLevelComp),
+		       "the processor records it, and a vowel preset does not override it");
 	}
 
 	std::printf ("\n%s\n", gFailures == 0 ? "all tests passed" : "TESTS FAILED");
