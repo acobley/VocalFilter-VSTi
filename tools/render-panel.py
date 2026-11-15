@@ -650,21 +650,49 @@ def buttons(img):
     lettering(d, 'at rest', S['value'], LABEL, (g[0] + g[2]) / 2, g[1] + 23, 'centre')
 
 
-def switch(d, c):
-    """Panel::SegmentSwitch::draw. With a reading (Level Comp) the slot is
-    the top of the rectangle, and the reading and label sit at its foot on
-    the knobs' lines."""
+def rotary_selector(img, c, index):
+    """Panel::RotarySwitch::draw - R2Synth's chicken head, its positions
+    printed round it, and the reading and name on a knob's lines."""
+    d = ImageDraw.Draw(img)
     S = L['styles']
-    whole = c['r']
-    r = list(whole)
-    if c['hasReading']:
-        r[3] = r[1] + L['switchSlot']
-        cx = (whole[0] + whole[2]) / 2
-        top = whole[3] - L['switchReadingBand']
-        lit = L['levelComp'] != 0
-        lettering(d, c['reading'], S['value'], INK if lit else LABEL, cx, top + L['knobValueH'] / 2, 'centre')
-        lettering(d, c['label'].upper(), S['label'], LABEL, cx, top + L['knobValueH'] + L['knobLabelH'] / 2,
-                  'centre')
+    g = c['selector']
+    cx, cy, rad = g['cx'], g['cy'], g['radius']
+    names = c['names']
+    cur = int(round(c['value']))
+    for i, name in enumerate(names):
+        t = g['angles'][i]
+        on = i == cur
+        stroke(d, [from_top(cx, cy, rad + 2.5, t), from_top(cx, cy, rad + 8, t)], RED if on else TICK,
+               2 if on else 1.6)
+        b = g['labelBoxes'][i]
+        lettering(d, name.upper(), S['label'], INK if on else INK_DIM, b[0], (b[1] + b[3]) / 2)
+
+    a = g['angles'][cur]
+    disc(d, cx, cy, rad * 0.8, fill=(11, 11, 11), outline=(68, 68, 68), width=0.8)
+    o, od = layer(img)
+    for radius, ang, r, alpha in L['wear']['controls'][index]['grit']:
+        x, y = from_top(cx, cy, rad * 0.8 * radius, a + ang)
+        disc(od, x, y, r, fill=colour('knurlDust') + (alpha,))
+    img.alpha_composite(o)
+    d = ImageDraw.Draw(img)
+    tip = from_top(cx, cy, rad + 3, a)
+    left = from_top(cx, cy, 8, a - 90)
+    right = from_top(cx, cy, 8, a + 90)
+    tail = from_top(cx, cy, rad, a + 180)
+    beak = [tip, right] + quad(right, tail, left)
+    d.polygon([pt(x, y) for x, y in beak], fill=(26, 26, 26))
+    stroke(d, beak + [tip], (0, 0, 0), 0.8)
+    stroke(d, [from_top(cx, cy, 2, a), tip], INK, 1.8)
+
+    lit = L['levelComp'] != 0
+    lettering(d, c['reading'], S['value'], INK if lit else LABEL, cx, g['readingY'], 'centre')
+    lettering(d, c['label'].upper(), S['label'], LABEL, cx, g['nameY'], 'centre')
+
+
+def switch(d, c):
+    """Panel::SegmentSwitch::draw."""
+    S = L['styles']
+    r = c['r']
     round_rect(d, [r[0] + 0.6, r[1] + 0.6, r[2] - 0.6, r[3] - 0.6], 3, fill=HEADER, outline=SECTION_EDGE, width=1.2)
     names = c['names']
     segw = (r[2] - r[0] - 4) / len(names)
@@ -710,6 +738,8 @@ def main():
     for i, c in enumerate(L['controls']):
         if c['kind'] == 'knob':
             knob(img, c, i)
+        elif c['kind'] == 'selector':
+            rotary_selector(img, c, i)
         else:
             switch(ImageDraw.Draw(img), c)
     img = img.convert('RGB').resize((L['width'] * SCALE, L['height'] * SCALE), Image.LANCZOS)

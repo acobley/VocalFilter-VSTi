@@ -823,8 +823,8 @@ The tests assert:
 * **The −0.1…−0.4 LU residual fully wet.** This is the gap between Kellet's
   pink filter and the model's exact pink. It is not a level error in the line.
 
-**On the panel (15 Nov 2026).** There is an **Off | On** switch in the Output
-section, with the make-up gain read out under it.
+**On the panel (15 Nov 2026).** There is a **rotary selector** in the Output
+section, OFF at −45° and ON at +45°, with the make-up gain read out under it.
 
 * **The reading's source.** The processor publishes the gain as parameter 24,
   `kLiveLevelComp`: −24…+24 dB, read-only, hidden, not saved. It is sent only
@@ -839,21 +839,41 @@ section, with the make-up gain read out under it.
 * **Fallback.** If the host never forwards published values, the editor runs
   `levelCompensationDb` on the targets itself, so the reading is still the
   model's number rather than a stuck 0.
-* **The control.** It is `Panel::SegmentSwitch` given a label. The slot takes
-  the top 24 px, and the reading and label are drawn at the rectangle's foot,
-  on the lines a knob's would be. The names come from `enumChoiceName`, so the
-  Voice switch is built the same way and no longer hard-codes "Male / Female".
+* **The control: R2Synth's chicken head.** The Polivoks panel's rule is that
+  every switch is a rotary selector, even a two-position one, so this is
+  R2Synth's `RotarySwitch`, ported unchanged apart from a reading line:
+  - its positions printed round it, the set one white with a red mark and the
+    other dim;
+  - a beak that points, with grit round the hub from `Wear::selectorGrit`,
+    also ported;
+  - a click on a name picks that position, a click on the hub steps to the
+    next, and the wheel steps.
+
+  `Layout::Kind::Selector`, `selectorOf`, `selectorLabelBox` and
+  `selectorPositionAt` are R2Synth's too, with one change: a 6 px band over
+  the knob instead of 26. R2Synth's band carries the middle name of a
+  three-position selector, but here both names hang beside the knob, and
+  LayoutTests holds them inside the rectangle. A three-position selector
+  needs the 26 back.
+* **Reading and name.** These sit at the rectangle's foot on a knob's lines.
   The reading is "+16.0 dB", or a plain "0.0 dB" at rest, from
   `Layout::levelCompReading`, which the tests share. It is white while Level
-  Comp is on or still easing out, and grey when it is off.
-* **Placement.** Centred between the rule after Trim and the section's edge
-  (1008–1128). The slot is centred on the knobs' centre line and the reading
-  is on Trim's line, and LayoutTests holds all three to that. The three-line
-  "Mix + Trim ease in…" note that used to be there moved under OUTPUT's title
-  as "stereo, one model / Mix + Trim ease in; / Comp follows the Glide".
-* **Rendering.** `dump-layout` prints switch names and the reading, and takes
-  Level Comp as a third argument. `render-panel.py` draws the reading and
-  takes Level Comp as a fourth argument.
+  Comp is on or still easing out, and grey when it is off. The names come from
+  `enumChoiceName`, so the Voice switch is built the same way and no longer
+  hard-codes "Male / Female". Voice stays a segment switch because it sits in
+  a title row, and that has no room for a selector.
+* **Placement.** 1018–1118 × 534–599, with a 30 px head. It is centred between
+  the rule after Trim and the section's edge, the head is on the knobs' centre
+  line (555), and the reading and name are on Trim's lines. LayoutTests holds
+  it to all of that, plus: OFF/ON inside the rectangle and clear of the marks;
+  the beak's reach stopping above the reading; and a click on the hub stepping
+  while a click left or right picks. The three-line "Mix + Trim ease in…" note
+  that used to be there moved under OUTPUT's title as "stereo, one model /
+  Mix + Trim ease in; / Comp follows the Glide".
+* **Rendering.** `dump-layout` prints the selector's geometry, label boxes,
+  grit and reading, and takes Level Comp as a third argument.
+  `render-panel.py` draws the chicken head (`rotary_selector`, R2Synth's
+  `selector`) and takes Level Comp as a fourth argument.
 
 ---
 

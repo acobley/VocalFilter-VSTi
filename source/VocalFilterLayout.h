@@ -26,7 +26,7 @@
 //   |  vowels, the dot, the glide +--------------------------------+
 //   |                             | FORMANTS  F1 | F2 | F3 knobs    |
 //   | [a][i][I][o][u]   (Glide)   +--------------------------------+
-//   | [ MANUAL       ]   progress | OUTPUT  Dry/Wet Trim [Off|On]  |
+//   | [ MANUAL       ]   progress | OUTPUT  Dry/Wet Trim  Lvl Comp |
 //   +-----------------------------+--------------------------------+
 //
 // THE PAD IS THE PARAMETER SPACE. Its axes run over exactly the F1 and F2
@@ -103,12 +103,17 @@ constexpr int kKnobTextBand  = kKnobGap + kKnobValueH + kKnobLabelH;
 /** A segmented switch that sits in a section's title row. */
 constexpr int kTitleSwitchHeight = 24;
 
-/** A segmented switch WITH A READING AND A LABEL under it, the way a knob
-    has - the Level Comp switch. The slot is the title switch's height;
-    the reading and label take the bottom of the rectangle, so they land
-    on the same lines as the knobs' beside it when the bottoms agree. */
-constexpr int kSwitchSlotHeight   = kTitleSwitchHeight;
-constexpr int kSwitchReadingBand  = kKnobValueH + kKnobLabelH;
+/** A ROTARY SELECTOR's rectangle (R2Synth's chicken head - the Polivoks
+    panel's switch), top to bottom: a band over the knob, the knob, and at
+    the foot a reading and its name on the lines a knob's would be.
+ *
+ *  The band is 6 px, not R2Synth's 26, because R2Synth's carries the
+ *  MIDDLE name of a three-position selector over the knob and the only
+ *  selector here has two, whose names hang beside it at -45 and +45 - the
+ *  tests hold those inside the rectangle. A three-position selector needs
+ *  R2Synth's band back. */
+constexpr int kSelectorTopBand     = 6;
+constexpr int kSelectorReadingBand = kKnobValueH + kKnobLabelH;
 
 /** The Level Comp reading: the make-up being applied, to a tenth of a dB,
     signed - "+16.0 dB" - and a plain "0.0 dB" when there is none. Here, so
@@ -211,7 +216,8 @@ inline double subtitleLeft (const Section& s)
 enum class Kind
 {
 	Knob,     // Panel::Knob - vertical drag
-	Switch    // Panel::SegmentSwitch - one segment per named position
+	Switch,   // Panel::SegmentSwitch - one segment per named position (Voice, in a title row)
+	Selector  // Panel::RotarySwitch - a chicken head, its positions printed round it (Level Comp)
 };
 
 struct Control
@@ -221,10 +227,9 @@ struct Control
 	Accent accent;
 	int    x, y;        // top left of the control's rectangle
 	int    width;
-	int    diameter;    // knobs only; 0 for a switch
+	int    diameter;    // a knob's; a selector's chicken-head circle; 0 for a switch
 	const char* label;
-	int    height = 0;  // switches only
-	bool   reading = false;   // switches only: a reading and the label under the slot
+	int    height = 0;  // switches and selectors
 };
 
 constexpr Rect controlRect (const Control& c)
@@ -269,13 +274,109 @@ constexpr Control kControls[] = {
 	{ kMix,        Kind::Knob, Accent::Mint, 786, 538, 72, 34, "Dry / Wet" },
 	{ kOutputTrim, Kind::Knob, Accent::Mint, 876, 538, 72, 34, "Trim" },
 
-	// LEVEL COMP, Off | On, with the make-up it is applying read out under
-	// the slot. Its slot is centred on the knobs' centre line (555) and its
-	// rectangle ends on their bottom (599), so the reading and the label
-	// sit on the same lines as Dry / Wet's and Trim's.
-	{ kLevelComp,  Kind::Switch, Accent::Mint, 1008, 543, 120, 0, "Level Comp", 56, true },
+	// LEVEL COMP: a rotary selector, OFF at -45 and ON at +45, with the
+	// make-up it is applying read out under it. The chicken head is
+	// centred on the knobs' centre line (555) and the rectangle ends on
+	// their bottom (599), so the reading and the name sit on the same
+	// lines as Dry / Wet's and Trim's.
+	{ kLevelComp,  Kind::Selector, Accent::Mint, 1018, 534, 100, 30, "Level Comp", 65 },
 };
 constexpr int kNumControls = static_cast<int> (sizeof (kControls) / sizeof (kControls[0]));
+
+//------------------------------------------------------------------------
+// The rotary selector - R2Synth's geometry, with VocalFilter's band
+//------------------------------------------------------------------------
+/** A selector's geometry: its knob, where its positions point (degrees
+    from twelve o'clock, clockwise - 45 either side, and straight up for
+    the middle of three), the radius its position names hang from, and
+    the lines its reading and name sit on. */
+struct Selector
+{
+	double cx, cy, radius, labelRadius;
+	int positions;
+	double angle[3];
+	double readingCentreY, nameCentreY;
+};
+
+inline Selector selectorOf (const Control& c, int positions)
+{
+	const Rect r = controlRect (c);
+	Selector s {};
+	s.radius = c.diameter / 2.0;
+	s.cx = (r.left + r.right) / 2.0;
+	s.cy = r.top + kSelectorTopBand + s.radius;
+	s.labelRadius = s.radius + 12.0;
+	s.positions = (positions < 2) ? 2 : (positions > 3 ? 3 : positions);
+	if (s.positions == 2)
+	{
+		s.angle[0] = -45.0;
+		s.angle[1] = 45.0;
+		s.angle[2] = 0.0;
+	}
+	else
+	{
+		s.angle[0] = -45.0;
+		s.angle[1] = 0.0;
+		s.angle[2] = 45.0;
+	}
+	const double textTop = r.bottom - kSelectorReadingBand;
+	s.readingCentreY = textTop + kKnobValueH / 2.0;
+	s.nameCentreY = textTop + kKnobValueH + kKnobLabelH / 2.0;
+	return s;
+}
+
+/** A point at `degrees` (from twelve o'clock, clockwise) and `radius`. */
+inline void selectorPoint (const Selector& s, double radius, double degrees, double& x, double& y)
+{
+	const double t = degrees * 3.14159265358979323846 / 180.0;
+	x = s.cx + radius * std::sin (t);
+	y = s.cy - radius * std::cos (t);
+}
+
+/** WHERE A POSITION'S NAME IS PRINTED: hung from labelRadius along its
+    angle - above the knob for the middle one, ending short of the line
+    on the left, starting past it on the right. (R2Synth's, unchanged.) */
+inline Box selectorLabelBox (const Selector& s, int index, const std::string& text)
+{
+	const double t = s.angle[index];
+	double px = 0.0, py = 0.0;
+	selectorPoint (s, s.labelRadius, t, px, py);
+	const double w = Lettering::width (text, kTextLabel);
+	const double h = kTextLabel.height ();
+	double left = 0.0, centreY = 0.0;
+	if (std::fabs (t) < 10.0)
+	{
+		left = px - w / 2.0;
+		centreY = py - 8.0;
+	}
+	else if (t < 0.0)
+	{
+		left = px - 2.0 - w;
+		centreY = py + 2.0;
+	}
+	else
+	{
+		left = px + 2.0;
+		centreY = py + 2.0;
+	}
+	return { left, centreY - h / 2.0, left + w, centreY + h / 2.0 };
+}
+
+/** THE POSITION A CLICK PICKS: on the knob itself, -1 (the knob steps
+    on); anywhere else in the selector, the position whose angle is
+    nearest the click's. (R2Synth's, unchanged.) */
+inline int selectorPositionAt (const Selector& s, double x, double y)
+{
+	const double dx = x - s.cx, dy = y - s.cy;
+	if (dx * dx + dy * dy <= s.radius * s.radius)
+		return -1;
+	const double t = std::atan2 (dx, -dy) * 180.0 / 3.14159265358979323846;
+	int best = 0;
+	for (int i = 1; i < s.positions; ++i)
+		if (std::fabs (s.angle[i] - t) < std::fabs (s.angle[best] - t))
+			best = i;
+	return best;
+}
 
 //------------------------------------------------------------------------
 // The views that are not parameter controls

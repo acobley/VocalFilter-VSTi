@@ -187,8 +187,8 @@ void printWear ()
 	std::printf ("    \"specks\": %s,\n", specks (w.specks).c_str ());
 	std::printf ("    \"fibres\": %s,\n", lines (w.fibres).c_str ());
 
-	// one entry per control, in kControls order: a knob's wear, or
-	// nothing for the switch
+	// one entry per control, in kControls order: a knob's wear, a
+	// selector's grit, or nothing for the switch
 	std::printf ("    \"controls\": [\n");
 	for (int i = 0; i < kNumControls; ++i)
 	{
@@ -206,6 +206,8 @@ void printWear ()
 			std::printf ("      {\"scuffs\": %s], \"grit\": %s, \"sheen\": %d, \"knurl\": %d}%s\n", scuffs.c_str (),
 			             polar (k.grit).c_str (), k.sheen, k.knurlAlpha, end);
 		}
+		else if (kControls[i].kind == Kind::Selector)
+			std::printf ("      {\"grit\": %s}%s\n", polar (selectorGrit (i)).c_str (), end);
 		else
 			std::printf ("      {}%s\n", end);
 	}
@@ -255,8 +257,7 @@ int main (int argc, char** argv)
 	std::printf ("\"headerDivider\": %d, \"wordmarkGap\": %d, \"sectionRadius\": %d,\n", kHeaderDivider,
 	             kWordmarkGap, kSectionRadius);
 	std::printf ("\"knobGap\": %d, \"knobValueH\": %d, \"knobLabelH\": %d,\n", kKnobGap, kKnobValueH, kKnobLabelH);
-	std::printf ("\"switchSlot\": %d, \"switchReadingBand\": %d, \"levelComp\": %d,\n", kSwitchSlotHeight,
-	             kSwitchReadingBand, levelComp);
+	std::printf ("\"levelComp\": %d,\n", levelComp);
 	std::printf ("\"manualHint\": \"%s\",\n", esc (kManualHint).c_str ());
 	std::printf ("\"screws\": [");
 	for (size_t i = 0; i < sizeof (kScrews) / sizeof (kScrews[0]); ++i)
@@ -310,12 +311,32 @@ int main (int argc, char** argv)
 			const double plain = field == 0 ? preset[k].freqHz : field == 1 ? preset[k].bandwidthHz : preset[k].levelDb;
 			normalized = def.toNormalized (plain);
 		}
-		// A switch: its position NAMES, and - for one with a reading under
-		// it (Level Comp) - that reading, from the same model and format
-		// the editor uses, at the factory Dry / Wet.
+		// A switch or selector: its position NAMES; a selector also its
+		// geometry and - Level Comp - its reading, from the same model and
+		// format the editor uses, at the factory Dry / Wet.
 		std::string names = "[";
 		std::string reading = readout (def, normalized);
-		if (c.kind == Kind::Switch)
+		std::string geometry = "null";
+		if (c.kind == Kind::Selector)
+		{
+			const int count = static_cast<int> (def.plainMax) + 1;
+			const Selector g = selectorOf (c, count);
+			geometry = "{\"cx\": " + num (g.cx) + ", \"cy\": " + num (g.cy) + ", \"radius\": " + num (g.radius) +
+			           ", \"readingY\": " + num (g.readingCentreY) + ", \"nameY\": " + num (g.nameCentreY) +
+			           ", \"angles\": [";
+			std::string boxes = "[";
+			for (int n = 0; n < count; ++n)
+			{
+				const std::string nm = enumChoiceName (c.tag, n);
+				std::string up = nm;
+				for (char& ch : up)
+					if (ch >= 'a' && ch <= 'z') ch = static_cast<char> (ch - 'a' + 'A');
+				geometry += std::string (n ? ", " : "") + num (g.angle[n]);
+				boxes += std::string (n ? ", " : "") + box (selectorLabelBox (g, n, up));
+			}
+			geometry += "], \"labelBoxes\": " + boxes + "]}";
+		}
+		if (c.kind != Kind::Knob)
 		{
 			for (int n = 0; n <= static_cast<int> (def.plainMax); ++n)
 				names += std::string (n ? ", " : "") + "\"" + esc (enumChoiceName (c.tag, n)) + "\"";
@@ -327,10 +348,11 @@ int main (int argc, char** argv)
 		}
 		names += "]";
 		std::printf ("  {\"kind\": \"%s\", \"accent\": \"%s\", \"label\": \"%s\", \"diameter\": %d, "
-		             "\"value\": %.6f, \"reading\": \"%s\", \"names\": %s, \"hasReading\": %s, "
+		             "\"value\": %.6f, \"reading\": \"%s\", \"names\": %s, \"selector\": %s, "
 		             "\"r\": [%d, %d, %d, %d]}%s\n",
-		             c.kind == Kind::Knob ? "knob" : "switch", accentName (c.accent), esc (c.label).c_str (),
-		             c.diameter, normalized, reading.c_str (), names.c_str (), c.reading ? "true" : "false",
+		             c.kind == Kind::Knob ? "knob" : c.kind == Kind::Selector ? "selector" : "switch",
+		             accentName (c.accent), esc (c.label).c_str (),
+		             c.diameter, normalized, reading.c_str (), names.c_str (), geometry.c_str (),
 		             r.left, r.top, r.right, r.bottom, i + 1 < kNumControls ? "," : "");
 	}
 	std::printf ("],\n");

@@ -110,6 +110,14 @@ bool allDrawn (const std::string& text, bool keepCase = false)
 	return true;
 }
 
+/** Capitals, as the views print a position's name. */
+std::string upper (std::string t)
+{
+	for (char& ch : t)
+		if (ch >= 'a' && ch <= 'z') ch = static_cast<char> (ch - 'a' + 'A');
+	return t;
+}
+
 std::string px (double v)
 {
 	char t[16];
@@ -287,7 +295,7 @@ int main ()
 			       std::string (voiceName (i)) + " fits its half of the Voice switch");
 		}
 
-		// ---- the Level Comp switch, its reading and its label ---------------
+		// ---- the Level Comp selector: R2Synth's chicken head ---------------
 		const Control* lc = nullptr;
 		const Control* trim = nullptr;
 		for (const auto& c : kControls)
@@ -295,13 +303,42 @@ int main ()
 			if (c.tag == kLevelComp) lc = &c;
 			if (c.tag == kOutputTrim) trim = &c;
 		}
-		check (lc != nullptr && lc->kind == Kind::Switch && lc->reading,
-		       "Level Comp is a switch with a reading under it");
+		check (lc != nullptr && lc->kind == Kind::Selector,
+		       "Level Comp is a rotary selector, the Polivoks panel's switch");
 		if (lc && trim)
 		{
+			const Rect r = controlRect (*lc);
+			const Selector g = selectorOf (*lc, kLevelCompCount);
+			check (g.positions == 2 && g.angle[0] == -45.0 && g.angle[1] == 45.0,
+			       "two positions: OFF at -45, ON at +45");
+
+			// Every printed name inside the rectangle and clear of the
+			// knob's marks - the 6 px band is only enough because both names
+			// hang BESIDE the knob.
 			for (int i = 0; i < kLevelCompCount; ++i)
-				check (Lettering::width (levelCompName (i), kTextPill) <= (lc->width - 4) / 2.0 - 8,
-				       std::string (levelCompName (i)) + " fits its half of the Level Comp switch");
+			{
+				const std::string name = upper (levelCompName (i));
+				const Box b = selectorLabelBox (g, i, name);
+				check (b.left >= r.left && b.right <= r.right && b.top >= r.top && b.bottom <= g.cy,
+				       name + " is printed inside the selector, above the hub's centre");
+				const double cx = (b.left + b.right) / 2.0, cy = (b.top + b.bottom) / 2.0;
+				check (std::hypot (cx - g.cx, cy - g.cy) > g.radius + 8.0 && b.bottom < g.readingCentreY - 6,
+				       name + " clears the knob and its mark, and the reading");
+				check (allDrawn (name), name + " has its glyphs");
+			}
+
+			// THE ROW: the knob on the knobs' centre line, the reading and
+			// the name on exactly Trim's lines, nothing below the knob's
+			// beak colliding with the reading.
+			const double knobCentre = trim->y + trim->diameter / 2.0;
+			check (std::fabs (g.cy - knobCentre) < 0.01, "its knob is on the knobs' centre line");
+			const double trimText = trim->y + trim->diameter + kKnobGap;
+			check (std::fabs (g.readingCentreY - (trimText + kKnobValueH / 2.0)) < 0.01,
+			       "its reading is on Trim's reading line");
+			check (std::fabs (g.nameCentreY - (trimText + kKnobValueH + kKnobLabelH / 2.0)) < 0.01,
+			       "its name is on Trim's label line");
+			check (g.cy + g.radius + 3.0 <= g.readingCentreY - kTextValue.height () / 2.0,
+			       "the beak's reach stops above the reading");
 
 			// The widest reading the editor can write: the clamp, both signs,
 			// and every tenth between.
@@ -309,36 +346,29 @@ int main ()
 			std::string which;
 			for (int t = -240; t <= 240; ++t)
 			{
-				const std::string r = levelCompReading (t / 10.0);
-				const double w = Lettering::width (r, kTextValue);
-				if (w > widest) { widest = w; which = r; }
+				const std::string rd = levelCompReading (t / 10.0);
+				const double w = Lettering::width (rd, kTextValue);
+				if (w > widest) { widest = w; which = rd; }
 			}
-			check (widest <= lc->width, "Level Comp: widest reading \"" + which + "\" (" + px (widest) +
-			                                ") fits " + std::to_string (lc->width));
+			check (widest <= r.width (), "Level Comp: widest reading \"" + which + "\" (" + px (widest) +
+			                                 ") fits " + std::to_string (r.width ()));
 			check (allDrawn ("+-0123456789. dB"), "every character of the reading has a glyph");
 			check (levelCompReading (16.04) == "+16.0 dB" && levelCompReading (0.01) == "0.0 dB" &&
 			       levelCompReading (-3.0) == "-3.0 dB",
 			       "the reading is signed to a tenth, and plain 0.0 dB at rest");
-			check (Lettering::width (lc->label, kTextLabel) <= lc->width, "Level Comp: label fits");
+			check (Lettering::width (lc->label, kTextLabel) <= r.width (), "Level Comp: name fits");
 
-			// THE ROW: the slot room above the reading, and the reading and
-			// label on exactly the lines Trim's are on.
-			const Rect r = controlRect (*lc);
-			check (r.height () >= kSwitchSlotHeight + kSwitchReadingBand + 4,
-			       "the slot and the reading band do not collide");
-			const int compText = r.bottom - kSwitchReadingBand;
-			const int trimText = trim->y + trim->diameter + kKnobGap;
-			check (compText == trimText, "its reading is on Trim's line (" + std::to_string (compText) + ")");
-			const double slotCentre = r.top + kSwitchSlotHeight / 2.0;
-			const double knobCentre = trim->y + trim->diameter / 2.0;
-			check (std::fabs (slotCentre - knobCentre) <= 1.0, "its slot is centred on the knobs' centre line");
+			// A click picks: on the hub, -1 (step on); left of it OFF, right ON.
+			check (selectorPositionAt (g, g.cx, g.cy) == -1 &&
+			       selectorPositionAt (g, g.cx - 30, g.cy - 10) == kLevelCompOff &&
+			       selectorPositionAt (g, g.cx + 30, g.cy - 10) == kLevelCompOn,
+			       "a click on the hub steps; left of it picks OFF, right of it ON");
 
 			// Right of the rule after Trim, and centred in the room it has.
 			const Rect& rule = kRules[3];
 			check (r.left >= rule.right + 12, "it sits right of the rule after Trim");
 			const double room = (rule.right + kOutputRect.right - kSectionPadX) / 2.0;
-			check (std::fabs ((r.left + r.right) / 2.0 - room) <= 2.0,
-			       "and centred between the rule and the section's edge");
+			check (std::fabs (g.cx - room) <= 2.0, "and centred between the rule and the section's edge");
 		}
 
 		// The notes under OUTPUT stay under its title box, not in it.
@@ -533,6 +563,16 @@ int main ()
 			knobsOk = knobsOk && k.sheen <= Wear::kMaxHazeAlpha;
 		}
 		check (knobsOk, "every knob mark is on its cap or knurling, and faint");
+
+		bool gritOk = true;
+		for (int i = 0; i < kNumControls; ++i)
+		{
+			if (kControls[i].kind != Kind::Selector)
+				continue;
+			for (const auto& g : Wear::selectorGrit (i))
+				gritOk = gritOk && g.radius > 0.8 && g.radius <= 1.0 && g.alpha <= Wear::kMaxMarkAlpha;
+		}
+		check (gritOk, "the selector's grit is round its hub's rim, and faint");
 		check (Wear::controlIndex (kGlide) >= 0 && Wear::controlIndex (999999) == -1, "controlIndex finds knobs");
 	}
 

@@ -750,7 +750,7 @@ void Knob::onMouseWheelEvent (MouseWheelEvent& event)
 }
 
 //------------------------------------------------------------------------
-// SegmentSwitch - R2Synth's, plus the reading and label under the slot
+// SegmentSwitch - R2Synth's, unchanged
 //------------------------------------------------------------------------
 SegmentSwitch::SegmentSwitch (const CRect& size, IControlListener* listener, int32_t tag,
                               Layout::Accent accent)
@@ -779,37 +779,10 @@ void SegmentSwitch::select (int index)
 	invalid ();
 }
 
-void SegmentSwitch::setReading (const std::string& reading, bool lit)
-{
-	if (reading != mReading || lit != mReadingLit)
-	{
-		mReading = reading;
-		mReadingLit = lit;
-		invalid ();
-	}
-}
-
 void SegmentSwitch::draw (CDrawContext* context)
 {
-	const CRect whole = getViewSize ();
+	const CRect r = getViewSize ();
 	context->setDrawMode (kAntiAliasing | kNonIntegralMode);
-
-	// With a label, the slot is the top of the rectangle and the reading
-	// and label sit at its foot; without one the slot is all of it.
-	CRect r (whole);
-	if (!mLabel.empty ())
-	{
-		r.bottom = r.top + Layout::kSwitchSlotHeight;
-
-		const CCoord cx = (whole.left + whole.right) / 2.;
-		const CCoord textTop = whole.bottom - Layout::kSwitchReadingBand;
-		if (!mReading.empty ())
-			drawLettering (context, mReading, Layout::kTextValue,
-			               mReadingLit ? Palette::kInk : Palette::kLabel, cx,
-			               textTop + Layout::kKnobValueH / 2., Align::Centre);
-		drawLettering (context, mLabel, Layout::kTextLabel, Palette::kLabel, cx,
-		               textTop + Layout::kKnobValueH + Layout::kKnobLabelH / 2., Align::Centre);
-	}
 
 	CRect outer (r);
 	outer.inset (0.6, 0.6);
@@ -856,6 +829,139 @@ void SegmentSwitch::onMouseUpEvent (MouseUpEvent& event)
 }
 
 void SegmentSwitch::onMouseWheelEvent (MouseWheelEvent& event)
+{
+	if (event.deltaY > 0.)
+		select (currentIndex () + 1);
+	else if (event.deltaY < 0.)
+		select (currentIndex () - 1);
+	event.consumed = true;
+}
+
+//------------------------------------------------------------------------
+// RotarySwitch - R2Synth's, plus the reading over its name
+//------------------------------------------------------------------------
+RotarySwitch::RotarySwitch (const CRect& size, IControlListener* listener, int32_t tag,
+                            const Layout::Control& layout)
+: CControl (size, listener, tag)
+, mLayout (layout)
+, mGeometry (Layout::selectorOf (layout, 2))
+{
+}
+
+void RotarySwitch::setNames (const std::vector<std::string>& names)
+{
+	mNames = names;
+	mGeometry = Layout::selectorOf (mLayout, count ());
+	invalid ();
+}
+
+void RotarySwitch::setReading (const std::string& reading, bool lit)
+{
+	if (reading != mReading || lit != mReadingLit)
+	{
+		mReading = reading;
+		mReadingLit = lit;
+		invalid ();
+	}
+}
+
+int RotarySwitch::currentIndex () const
+{
+	if (count () < 2)
+		return 0;
+	const int i = static_cast<int> (std::floor (getValueNormalized () * (count () - 1) + 0.5f));
+	return std::clamp (i, 0, count () - 1);
+}
+
+void RotarySwitch::select (int index)
+{
+	if (count () < 2)
+		return;
+	index = std::clamp (index, 0, count () - 1);
+	beginEdit ();
+	setValueNormalized (static_cast<float> (index) / static_cast<float> (count () - 1));
+	valueChanged ();
+	endEdit ();
+	invalid ();
+}
+
+void RotarySwitch::draw (CDrawContext* context)
+{
+	context->setDrawMode (kAntiAliasing | kNonIntegralMode);
+
+	const auto& g = mGeometry;
+	const CPoint centre (g.cx, g.cy);
+	const int n = std::min (count (), g.positions);
+	const int current = currentIndex ();
+
+	// ---- the printed positions: a mark and a name for each ----------------
+	for (int i = 0; i < n; ++i)
+	{
+		const bool set = (i == current);
+		const double t = g.angle[i];
+		strokeLine (context, pointFromTop (centre, g.radius + 2.5, t), pointFromTop (centre, g.radius + 8.0, t),
+		            set ? Palette::kRed : Palette::kTick, set ? 2.0 : 1.6);
+		const std::string name = upper (mNames[static_cast<size_t> (i)]);
+		const Layout::Box b = Layout::selectorLabelBox (g, i, name);
+		drawLettering (context, name, Layout::kTextLabel, set ? Palette::kInk : Palette::kInkDim, b.left,
+		               (b.top + b.bottom) / 2.);
+	}
+
+	// ---- the chicken head: a round hub and a beak that points ------------
+	const double a = (n > 0) ? g.angle[current] : 0.0;
+	fillCircle (context, centre, g.radius * 0.8, CColor (11, 11, 11, 255));
+	strokeCircle (context, centre, g.radius * 0.8, CColor (68, 68, 68, 255), 0.8);
+	for (const auto& s : mGrit)   // grit round the hub, turning with the beak
+		fillCircle (context, pointFromTop (centre, g.radius * 0.8 * s.radius, a + s.angle), s.r,
+		            wearColour (Wear::kKnurlDust, s.alpha));
+
+	auto beak = owned (context->createGraphicsPath ());
+	if (beak)
+	{
+		const CPoint tip = pointFromTop (centre, g.radius + 3.0, a);
+		const CPoint left = pointFromTop (centre, 8.0, a - 90.0);
+		const CPoint right = pointFromTop (centre, 8.0, a + 90.0);
+		const CPoint tail = pointFromTop (centre, g.radius, a + 180.0);
+		beak->beginSubpath (tip);
+		beak->addLine (right);
+		// The tail, a quadratic through `tail`, as a cubic.
+		const CPoint c1 (right.x + 2.0 / 3.0 * (tail.x - right.x), right.y + 2.0 / 3.0 * (tail.y - right.y));
+		const CPoint c2 (left.x + 2.0 / 3.0 * (tail.x - left.x), left.y + 2.0 / 3.0 * (tail.y - left.y));
+		beak->addBezierCurve (c1, c2, left);
+		beak->closeSubpath ();
+		fillCap (context, beak, centre, g.radius);
+		context->setFrameColor (CColor (0, 0, 0, 255));
+		context->setLineWidth (0.8);
+		context->setLineStyle (roundLine ());
+		context->drawGraphicsPath (beak, CDrawContext::kPathStroked);
+		strokeLine (context, pointFromTop (centre, 2.0, a), tip, Palette::kInk, 1.8);
+	}
+
+	// ---- the reading and the name, on a knob's lines -----------------------
+	if (!mReading.empty ())
+		drawLettering (context, mReading, Layout::kTextValue, mReadingLit ? Palette::kInk : Palette::kLabel,
+		               g.cx, g.readingCentreY, Align::Centre);
+	if (!mLabel.empty ())
+		drawLettering (context, mLabel, Layout::kTextLabel, Palette::kLabel, g.cx, g.nameCentreY, Align::Centre);
+
+	setDirty (false);
+}
+
+void RotarySwitch::onMouseDownEvent (MouseDownEvent& event)
+{
+	if (!event.buttonState.isLeft () || count () < 2)
+		return;
+	const int picked = Layout::selectorPositionAt (mGeometry, event.mousePosition.x, event.mousePosition.y);
+	select (picked >= 0 ? picked : (currentIndex () + 1) % count ());
+	event.consumed = true;
+}
+
+void RotarySwitch::onMouseUpEvent (MouseUpEvent& event)
+{
+	event.consumed = true;
+}
+
+void RotarySwitch::onMouseWheelEvent (MouseWheelEvent& event)
 {
 	if (event.deltaY > 0.)
 		select (currentIndex () + 1);

@@ -111,8 +111,8 @@ formant settings and Dry / Wet — rather than from the audio. So it follows a
 glide, never pumps and adds no latency. Pink noise comes out within half an LU
 of where it went in; other sources land near that. It is off by default, so
 projects saved before it existed sound unchanged. On the panel it is the
-**Off | On** switch in the Output section. The reading under it shows the
-make-up being applied right now, and it follows a glide.
+**rotary selector** (OFF / ON) in the Output section. The reading under it
+shows the make-up being applied right now, and it follows a glide.
 
 ### The panel
 
@@ -137,7 +137,7 @@ every word in the 70s sci-fi lettering, with light wear.
   summed with alternating polarity notch far deeper than any one does.
 * **Formants** — Freq, Width and Level knobs for each formant. While a preset
   is live they show the preset's values.
-* **Output** — Dry / Wet, Trim and the **Level Comp** switch, with the
+* **Output** — Dry / Wet, Trim and the **Level Comp** selector, with the
   make-up it is applying read out under it. **Bypass** is the pill in the header.
 
 Knobs: drag vertically, Shift for fine, double-click for the default, the

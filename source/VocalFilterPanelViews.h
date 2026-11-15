@@ -220,12 +220,7 @@ private:
 //------------------------------------------------------------------------
 /** A SEGMENTED SWITCH - the Voice switch: a white-framed black slot, one
     segment per named position, the current one printed white with black
-    lettering; a click selects, the wheel steps.
-
-    Given a LABEL, it is the Level Comp switch instead: the slot takes the
-    top Layout::kSwitchSlotHeight of the rectangle and a reading and the
-    label are printed under it, on the lines a knob's would be. The whole
-    rectangle is still the target. */
+    lettering; a click selects, the wheel steps. */
 class SegmentSwitch : public VSTGUI::CControl
 {
 public:
@@ -233,14 +228,6 @@ public:
 	               Layout::Accent accent);
 
 	void setNames (const std::vector<std::string>& names) { mNames = names; invalid (); }
-
-	/** Under the slot: the label, in capitals. Empty (the default) is a
-	    bare slot filling the rectangle. */
-	void setLabel (const std::string& label) { mLabel = upper (label); invalid (); }
-
-	/** The reading over the label - white when `lit`, the label's grey
-	    when not. Repaints only if something changed. */
-	void setReading (const std::string& reading, bool lit);
 
 	void draw (VSTGUI::CDrawContext* context) override;
 	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
@@ -256,9 +243,57 @@ private:
 
 	Layout::Accent mAccent;
 	std::vector<std::string> mNames;
+};
+
+//------------------------------------------------------------------------
+/** A ROTARY SELECTOR - R2Synth's black-panel switch, the Polivoks idiom:
+    a chicken-head knob, its positions printed round it (the one that is
+    set in white with a red mark, the others dim), and under it a reading
+    and its name on the lines a knob's would be. Geometry from
+    Layout::selectorOf(), which the tests read too.
+
+      click a position's name (or anywhere off the knob towards it)
+                 that position
+      click the knob     the next position, round to the first again
+      wheel      steps
+
+    Positions are spread evenly over 0..1, the way an Enum parameter's
+    normalised values are. Level Comp is the only one. */
+class RotarySwitch : public VSTGUI::CControl
+{
+public:
+	RotarySwitch (const VSTGUI::CRect& size, VSTGUI::IControlListener* listener, int32_t tag,
+	              const Layout::Control& layout);
+
+	void setNames (const std::vector<std::string>& names);
+	void setLabel (const std::string& label) { mLabel = upper (label); }
+
+	/** The reading over the name - white when `lit`, the label's grey when
+	    not. Repaints only if something changed. Empty: no reading. */
+	void setReading (const std::string& reading, bool lit);
+
+	/** Grit round the hub (Wear::selectorGrit), turning with it. */
+	void setWear (const std::vector<Wear::PolarSpeck>& grit) { mGrit = grit; }
+
+	void draw (VSTGUI::CDrawContext* context) override;
+	void onMouseDownEvent (VSTGUI::MouseDownEvent& event) override;
+	void onMouseUpEvent (VSTGUI::MouseUpEvent& event) override;
+	void onMouseWheelEvent (VSTGUI::MouseWheelEvent& event) override;
+
+	CLASS_METHODS (RotarySwitch, VSTGUI::CControl)
+
+private:
+	int count () const { return static_cast<int> (mNames.size ()); }
+	int currentIndex () const;
+	void select (int index);
+
+	Layout::Control mLayout;
+	Layout::Selector mGeometry;
+	std::vector<std::string> mNames;
 	std::string mLabel;
 	std::string mReading;
 	bool mReadingLit = false;
+	std::vector<Wear::PolarSpeck> mGrit;
 };
 
 //------------------------------------------------------------------------

@@ -436,6 +436,21 @@ inline KnobWear knobWear (int index)
 }
 
 //------------------------------------------------------------------------
+// A rotary selector's hub - `index` is its place in kControls. Grit round
+// the chicken head, turning with it. (R2Synth's, unchanged.)
+//------------------------------------------------------------------------
+inline std::vector<PolarSpeck> selectorGrit (int index)
+{
+	using namespace Detail;
+	Random rng (0x53656C65'00000000ull + static_cast<uint64_t> (index) * 0x9E37ull);   // "Sele"
+	std::vector<PolarSpeck> g;
+	for (int i = 0; i < 12; ++i)
+		g.push_back ({ rng.uniform (0.82, 1.0), rng.uniform (0, 360), rng.uniform (0.2, 0.5),
+		               alpha (rng.uniform (0.2, 0.4) * 255) });
+	return g;
+}
+
+//------------------------------------------------------------------------
 // A screen's glass - `index` is its place in kGlass: 0 the vowel chart,
 // 1 the spectrum
 //------------------------------------------------------------------------

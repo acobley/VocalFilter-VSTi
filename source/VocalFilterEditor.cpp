@@ -178,7 +178,25 @@ void VocalFilterEditor::addControl (const Layout::Control& c)
 	const ParamID tag = c.tag;
 	CControl* control = nullptr;
 
-	if (c.kind == Layout::Kind::Switch)
+	if (c.kind == Layout::Kind::Selector)
+	{
+		// R2Synth's rotary selector. The position names are
+		// enumChoiceName()'s, the words the host shows too.
+		auto* sel = new Panel::RotarySwitch (r, this, static_cast<int32_t> (tag), c);
+		std::vector<std::string> names;
+		for (int i = 0; i <= static_cast<int> (paramDef (tag).plainMax); ++i)
+			names.push_back (enumChoiceName (tag, i));
+		sel->setNames (names);
+		sel->setLabel (c.label ? c.label : paramDef (tag).title);
+		sel->setWear (Wear::selectorGrit (Wear::controlIndex (tag)));
+		if (tag == kLevelComp)
+		{
+			sel->setReading (Layout::levelCompReading (0.0), false);
+			mLevelCompSwitch = sel;
+		}
+		control = sel;
+	}
+	else if (c.kind == Layout::Kind::Switch)
 	{
 		auto* sw = new Panel::SegmentSwitch (r, this, static_cast<int32_t> (tag), c.accent);
 		// The names are enumChoiceName()'s - the same words the
@@ -187,13 +205,6 @@ void VocalFilterEditor::addControl (const Layout::Control& c)
 		for (int i = 0; i <= static_cast<int> (paramDef (tag).plainMax); ++i)
 			names.push_back (enumChoiceName (tag, i));
 		sw->setNames (names);
-		if (c.reading)
-		{
-			sw->setLabel (c.label ? c.label : paramDef (tag).title);
-			sw->setReading (Layout::levelCompReading (0.0), false);
-		}
-		if (tag == kLevelComp)
-			mLevelCompSwitch = sw;
 		control = sw;
 	}
 	else
